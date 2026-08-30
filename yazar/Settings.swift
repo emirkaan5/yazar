@@ -11,6 +11,9 @@ final class Settings {
         static let playSounds = "playSounds"
         static let soundTheme = "soundTheme"
         static let audioInputID = "audioInputID"
+#if DEBUG
+        static let demoMode = "demoMode"
+#endif
     }
 
     private let defaults: UserDefaults
@@ -41,6 +44,12 @@ final class Settings {
     var audioInputID: String {
         didSet { defaults.set(audioInputID, forKey: Key.audioInputID) }
     }
+
+#if DEBUG
+    var demoMode: Bool {
+        didSet { defaults.set(demoMode, forKey: Key.demoMode) }
+    }
+#endif
 
     var apiKey: String {
         didSet {
@@ -74,6 +83,9 @@ final class Settings {
         audioInputID = defaults.string(forKey: Key.audioInputID)
             ?? AudioInput.defaultID
             ?? ""
+#if DEBUG
+        demoMode = defaults.bool(forKey: Key.demoMode)
+#endif
         do {
             apiKey = try Keychain.load()
             apiKeyError = nil

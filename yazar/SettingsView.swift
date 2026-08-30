@@ -189,6 +189,19 @@ struct SettingsView: View {
                 .frame(width: 220, alignment: .trailing)
                 .disabled(!settings.playSounds)
             }
+
+#if DEBUG
+            rowDivider
+
+            settingsRow(
+                "Demo mode",
+                description: "Use the microphone, wait five seconds, then paste sample text."
+            ) {
+                Toggle("Demo mode", isOn: $settings.demoMode)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+            }
+#endif
         }
     }
 

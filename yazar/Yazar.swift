@@ -106,11 +106,12 @@ final class Yazar {
     private func finishRecording() {
         recorderPollingTask?.cancel()
         let wav = recorder.stop()
+        let demoMode = isDemoMode
         play(.stop)
         recordingStartedAt = nil
         level = 0
 
-        guard Self.containsSpeech(wav) else {
+        guard demoMode || Self.containsSpeech(wav) else {
             showNoSpeech()
             return
         }
@@ -124,7 +125,17 @@ final class Yazar {
         transcriptionTask?.cancel()
         transcriptionTask = Task { [weak self] in
             do {
-                let text = try await transcriber.transcribe(wav)
+                let text: String
+#if DEBUG
+                if demoMode {
+                    try await Task.sleep(for: .seconds(5))
+                    text = "This is a demo transcription from Yazar."
+                } else {
+                    text = try await transcriber.transcribe(wav)
+                }
+#else
+                text = try await transcriber.transcribe(wav)
+#endif
                 try Task.checkCancellation()
                 if !text.isEmpty { Inserter.paste(text) }
                 self?.state = .idle
@@ -181,6 +192,14 @@ final class Yazar {
 
     private func play(_ status: StatusSound) {
         soundPlayer.play(status, theme: settings.soundTheme, enabled: settings.playSounds)
+    }
+
+    private var isDemoMode: Bool {
+#if DEBUG
+        settings.demoMode
+#else
+        false
+#endif
     }
 
     private static func containsSpeech(_ wav: Data) -> Bool {
