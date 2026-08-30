@@ -9,6 +9,10 @@ struct YazarView: View {
     @Binding private var selection: AppPage
     @State private var customModel = ""
     @State private var isAddingCustomModel = false
+    @FocusState private var customModelFocused: Bool
+
+    // Sentinel selection for the pop-up's escape-hatch item; never reaches Settings.
+    private static let customModelTag = "\u{0}add-custom-model"
 
     private let suggestedModels = [
         "openai/gpt-transcribe",
@@ -74,6 +78,56 @@ struct YazarView: View {
         }
     }
 
+    // Selecting the escape-hatch item opens the sheet instead of storing the sentinel.
+    private var modelSelection: Binding<String> {
+        Binding {
+            settings.model
+        } set: { model in
+            guard model == Self.customModelTag else {
+                settings.model = model
+                return
+            }
+            customModel = suggestedModels.contains(settings.model) ? "" : settings.model
+            isAddingCustomModel = true
+        }
+    }
+
+    private var trimmedCustomModel: String {
+        customModel.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var customModelSheet: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Add a Custom Model")
+                    .font(.system(size: 13, weight: .semibold))
+                Text("Enter the OpenRouter model string, for example openai/gpt-transcribe.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            TextField("provider/model", text: $customModel)
+                .textFieldStyle(.roundedBorder)
+                .focused($customModelFocused)
+
+            HStack {
+                Spacer()
+                Button("Cancel") { isAddingCustomModel = false }
+                    .keyboardShortcut(.cancelAction)
+                Button("Add") {
+                    settings.model = trimmedCustomModel
+                    isAddingCustomModel = false
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(trimmedCustomModel.isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 360)
+        .onAppear { customModelFocused = true }
+    }
+
     private func refreshPermissions() {
         permissions.refresh()
         permissions.startPolling()
@@ -106,48 +160,24 @@ struct YazarView: View {
                 "Model",
                 description: "OpenRouter model used to transcribe recordings."
             ) {
-                Menu {
+                Picker("Model", selection: modelSelection) {
                     Section("Suggested Models") {
                         ForEach(suggestedModels, id: \.self) { model in
-                            Button {
-                                settings.model = model
-                            } label: {
-                                HStack {
-                                    Text(model)
-                                    if settings.model == model {
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
-                            }
+                            Text(model).tag(model)
                         }
                     }
 
-                    Divider()
-
-                    Button("Add a Custom Model…") {
-                        customModel = ""
-                        isAddingCustomModel = true
+                    if !suggestedModels.contains(settings.model) {
+                        Section("Custom Model") {
+                            Text(settings.model).tag(settings.model)
+                        }
                     }
-                } label: {
-                    Text(settings.model)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Text("Add a Custom Model…").tag(Self.customModelTag)
                 }
-                    .frame(width: 220)
-                    .alert("Add a Custom Model", isPresented: $isAddingCustomModel) {
-                        TextField("Model string", text: $customModel)
-                        Button("Cancel", role: .cancel) {}
-                        Button("Add") {
-                            settings.model = customModel.trimmingCharacters(
-                                in: .whitespacesAndNewlines
-                            )
-                        }
-                        .disabled(customModel.trimmingCharacters(
-                            in: .whitespacesAndNewlines
-                        ).isEmpty)
-                    } message: {
-                        Text("Enter the OpenRouter model string.")
-                    }
+                .labelsHidden()
+                .frame(width: 220)
+                .sheet(isPresented: $isAddingCustomModel) { customModelSheet }
             }
 
             rowDivider
