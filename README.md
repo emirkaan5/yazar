@@ -1,5 +1,8 @@
 # Yazar
 
+<img width="400" alt="yazar" src="https://github.com/user-attachments/assets/d75fcd7c-4c5e-4c80-9d8a-66f117e3bdcb" />
+
+
 Yazar is a small macOS app that does one thing well: speech to text.
 
 I built it because every BYOK option I found was either a heavy Electron app that didn't feel snappy, paid, or both. Yazar is native, lightweight, and gets out of your way.
