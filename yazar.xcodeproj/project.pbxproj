@@ -13,6 +13,9 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		14A0E8DB304355EF009CC89B /* yazar */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			explicitFolders = (
+				Resources/SFX,
+			);
 			path = yazar;
 			sourceTree = "<group>";
 		};

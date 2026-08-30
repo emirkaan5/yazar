@@ -14,7 +14,7 @@ Local models aren't supported yet. If the project picks up traction I'll look in
 - Hold-to-record dictation from anywhere in macOS
 - Automatic text insertion into the active app
 - Configurable OpenRouter transcription model and language
-- Selectable audio input and optional start/stop sounds
+- Selectable audio input and status sound themes
 - API keys stored in the macOS Keychain
 
 ## Requirements

@@ -167,11 +167,27 @@ struct SettingsView: View {
 
             settingsRow(
                 "Play sounds",
-                description: "Play feedback when recording starts and stops."
+                description: "Play feedback for recording and transcription status."
             ) {
                 Toggle("Play sounds", isOn: $settings.playSounds)
                     .labelsHidden()
                     .toggleStyle(.switch)
+            }
+
+            rowDivider
+
+            settingsRow(
+                "Sound theme",
+                description: "Sounds used for start, stop, and transcription errors."
+            ) {
+                Picker("Sound theme", selection: $settings.soundTheme) {
+                    ForEach(SoundTheme.allCases) { theme in
+                        Text(theme.displayName).tag(theme)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 220, alignment: .trailing)
+                .disabled(!settings.playSounds)
             }
         }
     }

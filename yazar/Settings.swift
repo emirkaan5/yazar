@@ -9,6 +9,7 @@ final class Settings {
         static let model = "model"
         static let language = "language"
         static let playSounds = "playSounds"
+        static let soundTheme = "soundTheme"
         static let audioInputID = "audioInputID"
     }
 
@@ -31,6 +32,10 @@ final class Settings {
 
     var playSounds: Bool {
         didSet { defaults.set(playSounds, forKey: Key.playSounds) }
+    }
+
+    var soundTheme: SoundTheme {
+        didSet { defaults.set(soundTheme.rawValue, forKey: Key.soundTheme) }
     }
 
     var audioInputID: String {
@@ -63,6 +68,9 @@ final class Settings {
         playSounds = defaults.object(forKey: Key.playSounds) == nil
             ? true
             : defaults.bool(forKey: Key.playSounds)
+        soundTheme = defaults.string(forKey: Key.soundTheme)
+            .flatMap(SoundTheme.init(rawValue:))
+            ?? .minimal
         audioInputID = defaults.string(forKey: Key.audioInputID)
             ?? AudioInput.defaultID
             ?? ""

@@ -1,4 +1,3 @@
-import AppKit
 import Foundation
 import Observation
 
@@ -21,17 +20,10 @@ final class Yazar {
     private let settings: Settings
     private let hotKey = HotKey()
     private let recorder = Recorder()
+    private let soundPlayer = StatusSoundPlayer()
     private var transcriptionTask: Task<Void, Never>?
     private var stateResetTask: Task<Void, Never>?
     private var recorderPollingTask: Task<Void, Never>?
-
-    // Held for the app's lifetime so playback isn't cut short when the caller returns.
-    private let startSound = NSSound(named: "Tink")
-    private let stopSound = NSSound(named: "Pop")
-    // The first play() after the output device has idled blocks its caller ~145 ms while
-    // CoreAudio starts the IO context. The Fn event tap is installed on the main run loop
-    // and the window server blocks on it, so that stall must not happen on the main thread.
-    private let soundQueue = DispatchQueue(label: "yazar.sounds", qos: .userInitiated)
 
     init(settings: Settings) {
         self.settings = settings
@@ -69,7 +61,7 @@ final class Yazar {
         recordingStartedAt = nil
         level = 0
         state = .warmingUp
-        play(startSound)
+        play(.start)
         do {
             try recorder.start(inputID: settings.audioInputID)
             startPollingRecorder()
@@ -114,7 +106,7 @@ final class Yazar {
     private func finishRecording() {
         recorderPollingTask?.cancel()
         let wav = recorder.stop()
-        play(stopSound)
+        play(.stop)
         recordingStartedAt = nil
         level = 0
 
@@ -140,6 +132,7 @@ final class Yazar {
                 return
             } catch {
                 guard !Task.isCancelled else { return }
+                self?.play(.error)
                 self?.showError(error.localizedDescription)
             }
         }
@@ -186,15 +179,8 @@ final class Yazar {
         }
     }
 
-    private func play(_ sound: NSSound?) {
-        guard settings.playSounds, let sound else { return }
-        // Pop runs 1.6 s, so tapping the hot key repeatedly re-triggers a sound that is
-        // still playing. play() refuses in that case and logs "Already playing"; rewinding
-        // first restarts it, which is what feedback sounds should do.
-        soundQueue.async {
-            sound.stop()
-            sound.play()
-        }
+    private func play(_ status: StatusSound) {
+        soundPlayer.play(status, theme: settings.soundTheme, enabled: settings.playSounds)
     }
 
     private static func containsSpeech(_ wav: Data) -> Bool {
