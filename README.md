@@ -7,7 +7,7 @@ Yazar is a small macOS app that does one thing well: speech to text.
 
 I built it because every BYOK option I found was either a heavy Electron app that didn't feel snappy, paid, or both. Yazar is native, lightweight, and gets out of your way.
 
-Local models aren't supported yet. If the project picks up traction I'll look into it — for now it's a simple utility.
+Local models aren't supported yet. If the project picks up traction I'll look into it. For now it's a simple utility.
 
 ## Features
 
