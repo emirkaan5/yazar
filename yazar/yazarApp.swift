@@ -40,7 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var menuBarIcon: String {
         guard let yazar else { return "waveform" }
         return switch yazar.state {
-        case .idle, .noSpeech: "waveform"
+        case .idle, .noSpeech, .copied: "waveform"
         case .warmingUp, .recording: "waveform.circle.fill"
         case .transcribing: "ellipsis.circle"
         case .error: "exclamationmark.circle"

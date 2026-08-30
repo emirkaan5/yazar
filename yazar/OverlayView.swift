@@ -31,6 +31,12 @@ struct OverlayView: View {
                     Text("No speech")
                 }
                 .foregroundStyle(.white)
+            case .copied:
+                HStack(spacing: 6) {
+                    Image(systemName: "doc.on.clipboard")
+                    Text("Copied to clipboard")
+                }
+                .foregroundStyle(.white)
             case .error(let message):
                 HStack(spacing: 6) {
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -93,8 +99,11 @@ struct OverlayView: View {
     }
 
     private var capsuleSize: CGSize {
-        if case .error = yazar.state { return CGSize(width: 400, height: 58) }
-        return CGSize(width: 115, height: 30)
+        switch yazar.state {
+        case .error: CGSize(width: 400, height: 58)
+        case .copied: CGSize(width: 170, height: 30)
+        default: CGSize(width: 115, height: 30)
+        }
     }
 
     private func elapsed(at date: Date) -> Double {
