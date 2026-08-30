@@ -20,8 +20,11 @@ struct OverlayView: View {
             case .recording:
                 recordingView
             case .transcribing:
+                // The system spinner draws its own grey and ignores .tint, so it
+                // gets lifted toward white with a brightness filter instead.
                 ProgressView()
                     .controlSize(.small)
+                    .brightness(0.4)
             case .noSpeech:
                 HStack(spacing: 6) {
                     Image(systemName: "mic.slash")
@@ -39,6 +42,10 @@ struct OverlayView: View {
             }
         }
         .font(.system(size: 11, weight: .medium))
+        // The capsule is always dark, so pin the content to dark appearance:
+        // the transcribing spinner and the `.secondary` waveform stay light
+        // even when the system is in light mode.
+        .environment(\.colorScheme, .dark)
         .padding(.horizontal, 12)
         .frame(width: capsuleSize.width, height: capsuleSize.height)
         .background(backgroundColor, in: Capsule())
