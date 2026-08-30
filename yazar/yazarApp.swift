@@ -40,7 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var menuBarIcon: String {
         guard let yazar else { return "waveform" }
         return switch yazar.state {
-        case .idle, .noSpeech: "waveform"
+        case .idle, .noSpeech, .copied: "waveform"
         case .warmingUp, .recording: "waveform.circle.fill"
         case .transcribing: "ellipsis.circle"
         case .error: "exclamationmark.circle"
@@ -90,7 +90,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 selection: Binding(
                     get: { [weak self] in self?.selectedPage ?? .general },
                     set: { [weak self] in self?.selectedPage = $0 }
-                )
+                ),
+                triggerDemoError: { [weak self] in
+#if DEBUG
+                    self?.yazar?.triggerDemoError()
+#endif
+                }
             )
         )
         hostingView.sizingOptions = [.minSize]

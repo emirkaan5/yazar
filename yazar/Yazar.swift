@@ -4,12 +4,13 @@ import Observation
 @MainActor
 @Observable
 final class Yazar {
-    enum State: Equatable {
+    enum State: Hashable {
         case idle
         case warmingUp
         case recording
         case transcribing
         case noSpeech
+        case copied
         case error(String)
     }
 
@@ -20,7 +21,7 @@ final class Yazar {
             switch state {
             case .warmingUp, .recording, .transcribing:
                 hotKey.captureEscape(true)
-            case .idle, .noSpeech, .error:
+            case .idle, .noSpeech, .copied, .error:
                 hotKey.captureEscape(false)
             }
         }
@@ -59,11 +60,18 @@ final class Yazar {
         showError(error.localizedDescription)
     }
 
+#if DEBUG
+    func triggerDemoError() {
+        play(.error)
+        showError("This is a demo error from Yazar.")
+    }
+#endif
+
     private func pressed() {
         switch state {
         case .idle:
             break
-        case .noSpeech, .error:
+        case .noSpeech, .copied, .error:
             stateResetTask?.cancel()
         case .warmingUp, .recording, .transcribing:
             return
@@ -85,7 +93,7 @@ final class Yazar {
         switch state {
         case .warmingUp, .recording:
             break
-        case .idle, .transcribing, .noSpeech, .error:
+        case .idle, .transcribing, .noSpeech, .copied, .error:
             return
         }
 
@@ -139,7 +147,7 @@ final class Yazar {
                 let text: String
 #if DEBUG
                 if demoMode {
-                    try await Task.sleep(for: .seconds(5))
+                    try await Task.sleep(for: .seconds(2))
                     text = "This is a demo transcription from Yazar."
                 } else {
                     text = try await transcriber.transcribe(wav)
@@ -148,8 +156,7 @@ final class Yazar {
                 text = try await transcriber.transcribe(wav)
 #endif
                 try Task.checkCancellation()
-                if !text.isEmpty { Inserter.paste(text) }
-                self?.state = .idle
+                self?.deliver(text)
             } catch is CancellationError {
                 return
             } catch {
@@ -175,7 +182,7 @@ final class Yazar {
             transcriptionTask = nil
             play(.cancel)
             state = .idle
-        case .idle, .noSpeech, .error:
+        case .idle, .noSpeech, .copied, .error:
             return
         }
     }
@@ -186,6 +193,26 @@ final class Yazar {
         transcriptionTask?.cancel()
         state = .error(message)
         resetState(after: .seconds(2.5))
+    }
+
+    /// Paste into the focused text field when there is one; otherwise the
+    /// transcription waits on the clipboard and the overlay says so, so a
+    /// dictation aimed at a non-text target is never silently dropped.
+    private func deliver(_ text: String) {
+        guard !text.isEmpty else {
+            state = .idle
+            return
+        }
+        switch Inserter.insert(text) {
+        case .pasted:
+            state = .idle
+        case .copied:
+            state = .copied
+            resetState(after: .seconds(1.6))
+        case .clipboardUnavailable:
+            play(.error)
+            showError("Couldn't put the transcription on the clipboard.")
+        }
     }
 
     private func showNoSpeech() {
