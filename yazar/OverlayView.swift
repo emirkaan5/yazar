@@ -107,7 +107,7 @@ struct OverlayView: View {
     private var capsuleSize: CGSize {
         switch yazar.state {
         case .error: CGSize(width: 350, height: 35)
-        case .copied: CGSize(width: 185, height: 35)
+        case .copied: CGSize(width: 200, height: 35)
         default: CGSize(width: 115, height: 35)
         }
     }
