@@ -25,10 +25,9 @@ struct SettingsView: View {
 
             VStack(spacing: 0) {
                 Text(selection.title)
-                    .font(.headline)
+                    .font(.system(size: 13, weight: .semibold))
                     .frame(maxWidth: .infinity)
-                    .padding(.top, 17)
-                    .padding(.bottom, 16)
+                    .frame(height: 30)
 
                 Divider()
 
@@ -44,7 +43,8 @@ struct SettingsView: View {
                         }
                     }
                     .frame(maxWidth: 620, alignment: .topLeading)
-                    .padding(20)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 16)
                 }
             }
             .background(Color(nsColor: .windowBackgroundColor))
@@ -65,35 +65,37 @@ struct SettingsView: View {
         }
     }
 
+    // Rows select on mouse-down rather than on click-up, so switching pages
+    // feels immediate. A zero-distance drag is the only gesture that fires on
+    // press; selection is idempotent, so repeated onChanged calls are harmless.
     private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 1) {
             ForEach(SettingsPage.allCases) { page in
-                Button {
-                    selection = page
-                } label: {
-                    Label(page.title, systemImage: page.systemImage)
-                        .font(.body.weight(.medium))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 7)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(selection == page ? .primary : .secondary)
-                .background {
-                    if selection == page {
-                        RoundedRectangle(cornerRadius: 7)
-                            .fill(Color.accentColor.opacity(0.18))
+                Label(page.title, systemImage: page.systemImage)
+					.font(.system(size: 14 ))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 8)
+                    .foregroundStyle(selection == page ? .primary : .secondary)
+                    .background {
+                        if selection == page {
+                            RoundedRectangle(cornerRadius: 9)
+                                .fill(Color.accentColor.opacity(0.18))
+                        }
                     }
-                }
-                .padding(.horizontal, 10)
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { _ in selection = page }
+                    )
+                    .padding(.horizontal, 8)
             }
 
             Spacer()
         }
-        .padding(.top, 54)
-        .padding(.bottom, 10)
-        .frame(width: 180)
+        .padding(.top, 36)
+        .padding(.bottom, 8)
+        .frame(width: 145)
         .background(Color(nsColor: .controlBackgroundColor))
     }
 
@@ -106,16 +108,16 @@ struct SettingsView: View {
                 SecureField("Required", text: $settings.apiKey)
                     .textFieldStyle(.roundedBorder)
                     .textContentType(.password)
-                    .frame(width: 240)
+                    .frame(width: 220)
             }
 
             if let error = settings.apiKeyError {
                 rowDivider
                 Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption)
+                    .font(.system(size: 11))
                     .foregroundStyle(.red)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
             }
 
             rowDivider
@@ -126,7 +128,7 @@ struct SettingsView: View {
             ) {
                 TextField("Model", text: $settings.model)
                     .textFieldStyle(.roundedBorder)
-                    .frame(width: 240)
+                    .frame(width: 220)
             }
 
             rowDivider
@@ -137,7 +139,7 @@ struct SettingsView: View {
             ) {
                 TextField("Auto-detect", text: $settings.language)
                     .textFieldStyle(.roundedBorder)
-                    .frame(width: 240)
+                    .frame(width: 220)
             }
         }
     }
@@ -158,7 +160,7 @@ struct SettingsView: View {
                     }
                 }
                 .labelsHidden()
-                .frame(width: 240)
+                .frame(width: 220)
             }
 
             rowDivider
@@ -222,17 +224,17 @@ struct SettingsView: View {
         _ title: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             Text(title)
-                .font(.title3.bold())
+                .font(.system(size: 15, weight: .semibold))
 
             VStack(spacing: 0) {
                 content()
             }
             .background(Color(nsColor: .controlBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .clipShape(RoundedRectangle(cornerRadius: 9))
             .overlay {
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: 9)
                     .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
             }
         }
@@ -243,12 +245,12 @@ struct SettingsView: View {
         description: String,
         @ViewBuilder control: () -> Control
     ) -> some View {
-        HStack(spacing: 18) {
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.body.weight(.medium))
+                    .font(.system(size: 13))
                 Text(description)
-                    .font(.callout)
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -256,8 +258,8 @@ struct SettingsView: View {
             Spacer(minLength: 8)
             control()
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
     }
 
     private func permissionRow(
@@ -270,7 +272,7 @@ struct SettingsView: View {
         settingsRow(title, description: description) {
             if granted {
                 Label("Granted", systemImage: "checkmark.circle.fill")
-                    .font(.callout)
+                    .font(.system(size: 12))
                     .foregroundStyle(.green)
             } else {
                 Button(actionTitle, action: action)
@@ -281,7 +283,7 @@ struct SettingsView: View {
 
     private var rowDivider: some View {
         Divider()
-            .padding(.leading, 16)
+            .padding(.leading, 12)
     }
 
 }
@@ -308,4 +310,11 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .permissions: "lock.shield"
         }
     }
+}
+
+#Preview {
+    SettingsView(
+        settings: Settings(),
+        permissions: Permissions()
+    )
 }

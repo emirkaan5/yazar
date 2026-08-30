@@ -72,13 +72,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.title = "Yazar Settings"
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
-        window.minSize = NSSize(width: 680, height: 420)
         window.isReleasedWhenClosed = false
         window.center()
         let hostingView = NSHostingView(
             rootView: SettingsView(settings: settings, permissions: permissions, selection: page)
         )
-        hostingView.sizingOptions = []
+        // .minSize makes SettingsView's own minWidth/minHeight the window's
+        // minimum. With no sizing options the hosting view zeroes out
+        // window.minSize on its first layout pass, leaving the window
+        // resizable down to nothing.
+        hostingView.sizingOptions = [.minSize]
         hostingView.autoresizingMask = [.width, .height]
         window.contentView = hostingView
         settingsWindow = window
