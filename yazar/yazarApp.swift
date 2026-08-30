@@ -8,10 +8,9 @@ struct YazarApp: App {
 
     var body: some Scene {
         MenuBarExtra("Yazar", systemImage: appDelegate.menuBarIcon) {
-            Button("Settings…") {
-                appDelegate.showSettings()
+            Button("Open Yazar") {
+                appDelegate.showApp()
             }
-            .keyboardShortcut(",")
 
             Divider()
 
@@ -28,9 +27,15 @@ struct YazarApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let settings = Settings()
     private let permissions = Permissions()
+    private var selectedPage = AppPage.general
     private var yazar: Yazar?
     private var overlayPanel: OverlayPanel?
-    private var settingsWindow: NSWindow?
+    private var appWindow: NSWindow?
+
+    override init() {
+        super.init()
+        permissions.refresh()
+    }
 
     var menuBarIcon: String {
         guard let yazar else { return "waveform" }
@@ -43,12 +48,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        permissions.refresh()
-
-        if permissions.allGranted && permissions.fnConfigured {
+        if permissions.readyToUse {
             startYazar()
         } else {
-            showSettings(page: .permissions)
+            showApp(page: .permissions)
         }
     }
 
@@ -56,9 +59,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         yazar?.stop()
     }
 
-    func showSettings(page: SettingsPage = .general) {
-        if let settingsWindow {
-            settingsWindow.makeKeyAndOrderFront(nil)
+    func showApp(page: AppPage? = nil) {
+        if let page {
+            selectedPage = page
+        }
+
+        if let appWindow {
+            appWindow.makeKeyAndOrderFront(nil)
             NSApp.activate()
             return
         }
@@ -69,22 +76,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "Yazar Settings"
+        window.title = "Yazar"
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
         window.center()
         let hostingView = NSHostingView(
-            rootView: SettingsView(settings: settings, permissions: permissions, selection: page)
+            rootView: YazarView(
+                settings: settings,
+                permissions: permissions,
+                selection: Binding(
+                    get: { [weak self] in self?.selectedPage ?? .general },
+                    set: { [weak self] in self?.selectedPage = $0 }
+                )
+            )
         )
-        // .minSize makes SettingsView's own minWidth/minHeight the window's
-        // minimum. With no sizing options the hosting view zeroes out
-        // window.minSize on its first layout pass, leaving the window
-        // resizable down to nothing.
         hostingView.sizingOptions = [.minSize]
         hostingView.autoresizingMask = [.width, .height]
         window.contentView = hostingView
-        settingsWindow = window
+        appWindow = window
         window.makeKeyAndOrderFront(nil)
         NSApp.activate()
     }

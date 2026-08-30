@@ -17,6 +17,7 @@ final class Permissions {
     }
 
     var fnConfigured: Bool { fnUsage == 0 }
+    var readyToUse: Bool { allGranted && fnConfigured }
 
     func refresh() {
         microphoneGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized

@@ -1,51 +1,54 @@
 import SwiftUI
 
-struct SettingsView: View {
+struct YazarView: View {
     @Bindable var settings: Settings
     @Bindable var permissions: Permissions
-    @State private var selection: SettingsPage
+    @Binding private var selection: AppPage
+    @State private var customModel = ""
+    @State private var isAddingCustomModel = false
+
+    private let suggestedModels = [
+        "openai/gpt-transcribe",
+        "mistralai/voxtral-mini-transcribe",
+    ]
 
     private var audioInputs: [AudioInput] { AudioInput.available }
 
     init(
         settings: Settings,
         permissions: Permissions,
-        selection: SettingsPage = .general
+        selection: Binding<AppPage> = .constant(.general)
     ) {
         self.settings = settings
         self.permissions = permissions
-        _selection = State(initialValue: selection)
+        _selection = selection
     }
 
     var body: some View {
         HStack(spacing: 0) {
-            sidebar
+            List(AppPage.allCases, selection: $selection) { page in
+                Label(page.title, systemImage: page.systemImage)
+                    .tag(page)
+            }
+            .listStyle(.sidebar)
+            .safeAreaPadding(.top, 36)
+            .frame(width: 180)
 
             Divider()
 
-            VStack(spacing: 0) {
-                Text(selection.title)
-                    .font(.system(size: 13, weight: .semibold))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 30)
-
-                Divider()
-
-                ScrollView {
-                    Group {
-                        switch selection {
-                        case .general:
-                            generalSettings
-                        case .dictation:
-                            dictationSettings
-                        case .permissions:
-                            permissionSettings
-                        }
+            ScrollView {
+                Group {
+                    switch selection {
+                    case .general:
+                        generalSettings
+                    case .dictation:
+                        dictationSettings
+                    case .permissions:
+                        permissionSettings
                     }
-                    .frame(maxWidth: 620, alignment: .topLeading)
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 16)
                 }
+                .frame(maxWidth: 620, alignment: .topLeading)
+                .padding(20)
             }
             .background(Color(nsColor: .windowBackgroundColor))
         }
@@ -53,50 +56,19 @@ struct SettingsView: View {
         .ignoresSafeArea(.container, edges: .top)
         .onAppear {
             if selection == .permissions {
-                permissions.refresh()
-                permissions.startPolling()
+                refreshPermissions()
             }
         }
         .onChange(of: selection) { _, page in
             if page == .permissions {
-                permissions.refresh()
-                permissions.startPolling()
+                refreshPermissions()
             }
         }
     }
 
-    // Rows select on mouse-down rather than on click-up, so switching pages
-    // feels immediate. A zero-distance drag is the only gesture that fires on
-    // press; selection is idempotent, so repeated onChanged calls are harmless.
-    private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            ForEach(SettingsPage.allCases) { page in
-                Label(page.title, systemImage: page.systemImage)
-					.font(.system(size: 14 ))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 8)
-                    .foregroundStyle(selection == page ? .primary : .secondary)
-                    .background {
-                        if selection == page {
-                            RoundedRectangle(cornerRadius: 9)
-                                .fill(Color.accentColor.opacity(0.18))
-                        }
-                    }
-                    .contentShape(Rectangle())
-                    .gesture(
-                        DragGesture(minimumDistance: 0)
-                            .onChanged { _ in selection = page }
-                    )
-                    .padding(.horizontal, 8)
-            }
-
-            Spacer()
-        }
-        .padding(.top, 36)
-        .padding(.bottom, 8)
-        .frame(width: 145)
-        .background(Color(nsColor: .controlBackgroundColor))
+    private func refreshPermissions() {
+        permissions.refresh()
+        permissions.startPolling()
     }
 
     private var generalSettings: some View {
@@ -126,9 +98,48 @@ struct SettingsView: View {
                 "Model",
                 description: "OpenRouter model used to transcribe recordings."
             ) {
-                TextField("Model", text: $settings.model)
-                    .textFieldStyle(.roundedBorder)
+                Menu {
+                    Section("Suggested Models") {
+                        ForEach(suggestedModels, id: \.self) { model in
+                            Button {
+                                settings.model = model
+                            } label: {
+                                HStack {
+                                    Text(model)
+                                    if settings.model == model {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Divider()
+
+                    Button("Add a Custom Model…") {
+                        customModel = ""
+                        isAddingCustomModel = true
+                    }
+                } label: {
+                    Text(settings.model)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
                     .frame(width: 220)
+                    .alert("Add a Custom Model", isPresented: $isAddingCustomModel) {
+                        TextField("Model string", text: $customModel)
+                        Button("Cancel", role: .cancel) {}
+                        Button("Add") {
+                            settings.model = customModel.trimmingCharacters(
+                                in: .whitespacesAndNewlines
+                            )
+                        }
+                        .disabled(customModel.trimmingCharacters(
+                            in: .whitespacesAndNewlines
+                        ).isEmpty)
+                    } message: {
+                        Text("Enter the OpenRouter model string.")
+                    }
             }
 
             rowDivider
@@ -235,7 +246,7 @@ struct SettingsView: View {
                 action: permissions.openKeyboardSettings
             )
 
-            if permissions.allGranted && permissions.fnConfigured {
+            if permissions.readyToUse {
                 rowDivider
 
                 settingsRow(
@@ -317,7 +328,7 @@ struct SettingsView: View {
 
 }
 
-enum SettingsPage: String, CaseIterable, Identifiable {
+enum AppPage: CaseIterable, Identifiable {
     case general
     case dictation
     case permissions
@@ -342,7 +353,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
 }
 
 #Preview {
-    SettingsView(
+    YazarView(
         settings: Settings(),
         permissions: Permissions()
     )
