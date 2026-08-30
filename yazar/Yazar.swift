@@ -13,7 +13,18 @@ final class Yazar {
         case error(String)
     }
 
-    private(set) var state: State = .idle
+    // Escape capture follows the cancellable states so every path that finishes
+    // or abandons a dictation releases the global key.
+    private(set) var state: State = .idle {
+        didSet {
+            switch state {
+            case .warmingUp, .recording, .transcribing:
+                hotKey.captureEscape(true)
+            case .idle, .noSpeech, .error:
+                hotKey.captureEscape(false)
+            }
+        }
+    }
     private(set) var level = 0.0
     private(set) var recordingStartedAt: Date?
 
@@ -149,6 +160,8 @@ final class Yazar {
         }
     }
 
+    /// Escape drops whatever is in flight. Only reachable while a dictation is
+    /// running, since that is the only time the hot key is registered.
     private func cancel() {
         switch state {
         case .warmingUp, .recording:
@@ -160,6 +173,7 @@ final class Yazar {
         case .transcribing:
             transcriptionTask?.cancel()
             transcriptionTask = nil
+            play(.cancel)
             state = .idle
         case .idle, .noSpeech, .error:
             return

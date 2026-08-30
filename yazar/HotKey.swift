@@ -1,3 +1,4 @@
+import Carbon.HIToolbox
 import CoreGraphics
 import Foundation
 
@@ -17,11 +18,12 @@ final class HotKey {
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
     private var wasDown = false
+    private var escapeHotKey: EventHotKeyRef?
+    private var escapeHandler: EventHandlerRef?
 
     func start() throws {
         guard tap == nil else { return }
-        let eventMask = (CGEventMask(1) << CGEventType.flagsChanged.rawValue)
-            | (CGEventMask(1) << CGEventType.keyDown.rawValue)
+        let eventMask = CGEventMask(1) << CGEventType.flagsChanged.rawValue
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
             place: .headInsertEventTap,
@@ -41,6 +43,9 @@ final class HotKey {
     }
 
     func stop() {
+        captureEscape(false)
+        if let escapeHandler { RemoveEventHandler(escapeHandler) }
+        escapeHandler = nil
         if let source {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
         }
@@ -50,6 +55,60 @@ final class HotKey {
         source = nil
         tap = nil
         wasDown = false
+    }
+
+    /// Claims Escape while a dictation is in flight. A registered hot key
+    /// consumes the key outright and needs no Accessibility or Input Monitoring
+    /// grant, unlike reading key presses from the event tap. It also hides
+    /// Escape from every other app, so it stays registered only while there is
+    /// something to cancel.
+    func captureEscape(_ capture: Bool) {
+        guard capture else {
+            if let escapeHotKey { UnregisterEventHotKey(escapeHotKey) }
+            escapeHotKey = nil
+            return
+        }
+
+        guard escapeHotKey == nil else { return }
+
+        if escapeHandler == nil {
+            var spec = EventTypeSpec(
+                eventClass: OSType(kEventClassKeyboard),
+                eventKind: UInt32(kEventHotKeyPressed)
+            )
+            var installedHandler: EventHandlerRef?
+            let status = InstallEventHandler(
+                GetApplicationEventTarget(),
+                escapeHotKeyCallback,
+                1,
+                &spec,
+                Unmanaged.passUnretained(self).toOpaque(),
+                &installedHandler
+            )
+            guard status == noErr, let installedHandler else {
+                NSLog("Yazar could not install its Escape handler (OSStatus %d)", status)
+                return
+            }
+            escapeHandler = installedHandler
+        }
+
+        var hotKeyRef: EventHotKeyRef?
+        let id = EventHotKeyID(signature: OSType(0x59_41_5A_52), id: 1)
+        // Fails with eventHotKeyExistsErr if another app already owns a bare
+        // Escape. Nothing to recover to, but silence would look like a dead key.
+        let status = RegisterEventHotKey(
+            UInt32(kVK_Escape),
+            0,
+            id,
+            GetApplicationEventTarget(),
+            0,
+            &hotKeyRef
+        )
+        guard status == noErr else {
+            NSLog("Yazar could not register Escape to cancel (OSStatus %d)", status)
+            return
+        }
+        escapeHotKey = hotKeyRef
     }
 
     fileprivate func reenable() {
@@ -82,12 +141,19 @@ private func hotKeyCallback(
     } else if type == .flagsChanged {
         let flags = event.flags
         DispatchQueue.main.async { [hotKey] in hotKey.handleFlags(flags) }
-    } else if type == .keyDown {
-        let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
-        guard keyCode == 53 else { return Unmanaged.passUnretained(event) }
-        let isRepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
-        guard !isRepeat else { return Unmanaged.passUnretained(event) }
-        DispatchQueue.main.async { [hotKey] in hotKey.onCancel() }
     }
     return Unmanaged.passUnretained(event)
+}
+
+
+// Carbon delivers hot key events on the main thread, so the cancel runs inline.
+private func escapeHotKeyCallback(
+    handler: EventHandlerCallRef?,
+    event: EventRef?,
+    userInfo: UnsafeMutableRawPointer?
+) -> OSStatus {
+    guard let userInfo else { return OSStatus(eventNotHandledErr) }
+    let hotKey = Unmanaged<HotKey>.fromOpaque(userInfo).takeUnretainedValue()
+    MainActor.assumeIsolated { hotKey.onCancel() }
+    return noErr
 }

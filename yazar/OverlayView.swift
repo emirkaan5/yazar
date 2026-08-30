@@ -20,7 +20,7 @@ struct OverlayView: View {
             case .recording:
                 recordingView
             case .transcribing:
-                // TheThis is a demo transcription from Yazar. system spinner draws its own grey and ignores .tint, so it
+                // The system spinner draws its own grey and ignores .tint, so it
                 // gets lifted toward white with a brightness filter instead.
                 ProgressView()
                     .controlSize(.small)

@@ -178,7 +178,7 @@ struct SettingsView: View {
 
             settingsRow(
                 "Sound theme",
-                description: "Sounds used for start, stop, and transcription errors."
+                description: "Sounds used for start, stop, cancellation, and transcription errors."
             ) {
                 Picker("Sound theme", selection: $settings.soundTheme) {
                     ForEach(SoundTheme.allCases) { theme in

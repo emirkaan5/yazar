@@ -4,6 +4,7 @@ import Foundation
 enum StatusSound: String, Sendable {
     case start
     case stop
+    case cancel
     case error
 }
 
