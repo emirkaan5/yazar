@@ -60,6 +60,13 @@ final class Yazar {
         showError(error.localizedDescription)
     }
 
+#if DEBUG
+    func triggerDemoError() {
+        play(.error)
+        showError("This is a demo error from Yazar.")
+    }
+#endif
+
     private func pressed() {
         switch state {
         case .idle:

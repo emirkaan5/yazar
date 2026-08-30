@@ -14,6 +14,8 @@ struct YazarView: View {
     // Sentinel selection for the pop-up's escape-hatch item; never reaches Settings.
     private static let customModelTag = "\u{0}add-custom-model"
 
+    private let triggerDemoError: () -> Void
+
     private let suggestedModels = [
         "openai/gpt-transcribe",
         "mistralai/voxtral-mini-transcribe",
@@ -24,11 +26,13 @@ struct YazarView: View {
     init(
         settings: Settings,
         permissions: Permissions,
-        selection: Binding<AppPage> = .constant(.general)
+        selection: Binding<AppPage> = .constant(.general),
+        triggerDemoError: @escaping () -> Void
     ) {
         self.settings = settings
         self.permissions = permissions
         _selection = selection
+        self.triggerDemoError = triggerDemoError
     }
 
     var body: some View {
@@ -250,6 +254,16 @@ struct YazarView: View {
                     .labelsHidden()
                     .toggleStyle(.switch)
             }
+
+            rowDivider
+
+            settingsRow(
+                "Error mode",
+                description: "Show the error state used when transcription fails."
+            ) {
+                Button("Trigger error mode", action: triggerDemoError)
+                    .buttonStyle(.bordered)
+            }
 #endif
         }
     }
@@ -393,6 +407,7 @@ enum AppPage: CaseIterable, Identifiable {
 #Preview {
     YazarView(
         settings: Settings(),
-        permissions: Permissions()
+        permissions: Permissions(),
+        triggerDemoError: {}
     )
 }

@@ -90,7 +90,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 selection: Binding(
                     get: { [weak self] in self?.selectedPage ?? .general },
                     set: { [weak self] in self?.selectedPage = $0 }
-                )
+                ),
+                triggerDemoError: { [weak self] in
+#if DEBUG
+                    self?.yazar?.triggerDemoError()
+#endif
+                }
             )
         )
         hostingView.sizingOptions = [.minSize]
