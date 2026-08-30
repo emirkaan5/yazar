@@ -140,7 +140,7 @@ final class Yazar {
                 let text: String
 #if DEBUG
                 if demoMode {
-                    try await Task.sleep(for: .seconds(5))
+                    try await Task.sleep(for: .seconds(2))
                     text = "This is a demo transcription from Yazar."
                 } else {
                     text = try await transcriber.transcribe(wav)
