@@ -24,7 +24,7 @@ struct YazarApp: App {
 
 @MainActor
 @Observable
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let settings = Settings()
     private let permissions = Permissions()
     private var selectedPage = AppPage.general
@@ -71,7 +71,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 740, height: 460),
+            contentRect: NSRect(origin: .zero, size: YazarView.minimumSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -80,6 +80,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
+        window.collectionBehavior.insert(.fullScreenNone)
+        window.collectionBehavior.insert(.fullScreenDisallowsTiling)
         window.center()
         let hostingView = NSHostingView(
             rootView: YazarView(
@@ -94,9 +96,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hostingView.sizingOptions = [.minSize]
         hostingView.autoresizingMask = [.width, .height]
         window.contentView = hostingView
+        window.maxSize = maximumFrameSize(for: window)
+        window.delegate = self
         appWindow = window
         window.makeKeyAndOrderFront(nil)
         NSApp.activate()
+    }
+
+    func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
+        let maximumSize = maximumFrameSize(for: sender)
+        return NSSize(
+            width: min(frameSize.width, maximumSize.width),
+            height: min(frameSize.height, maximumSize.height)
+        )
+    }
+
+    private func maximumFrameSize(for window: NSWindow) -> NSSize {
+        window.frameRect(
+            forContentRect: NSRect(origin: .zero, size: YazarView.maximumSize)
+        ).size
     }
 
     private func startYazar() {

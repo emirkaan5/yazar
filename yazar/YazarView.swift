@@ -1,6 +1,9 @@
 import SwiftUI
 
 struct YazarView: View {
+    static let minimumSize = CGSize(width: 680, height: 420)
+    static let maximumSize = CGSize(width: 800, height: 520)
+
     @Bindable var settings: Settings
     @Bindable var permissions: Permissions
     @Binding private var selection: AppPage
@@ -31,8 +34,8 @@ struct YazarView: View {
                     .tag(page)
             }
             .listStyle(.sidebar)
-            .safeAreaPadding(.top, 36)
-            .frame(width: 180)
+            .safeAreaPadding(.top, 30)
+            .frame(width: 140)
 
             Divider()
 
@@ -52,8 +55,13 @@ struct YazarView: View {
             }
             .background(Color(nsColor: .windowBackgroundColor))
         }
-        .frame(minWidth: 680, minHeight: 420)
-        .ignoresSafeArea(.container, edges: .top)
+        .frame(
+            minWidth: Self.minimumSize.width,
+            maxWidth: .infinity,
+            minHeight: Self.minimumSize.height,
+            maxHeight: .infinity
+        )
+        .ignoresSafeArea(.container)
         .onAppear {
             if selection == .permissions {
                 refreshPermissions()
