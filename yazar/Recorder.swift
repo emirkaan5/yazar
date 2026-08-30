@@ -252,7 +252,9 @@ final class Recorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate, @u
             let sample = Double(samples[index]) / Double(Int16.max)
             sum += sample * sample
         }
-        return min(1, sqrt(sum / Double(count)) * 5)
+        // Speech RMS sits around 0.02-0.15, so a plain linear gain leaves the
+        // meter pinned near the bottom. The power curve expands the quiet end.
+        return min(1, pow(sqrt(sum / Double(count)) * 6, 0.65))
     }
 
     private static func wav(from pcm: Data) -> Data {

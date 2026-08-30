@@ -20,7 +20,7 @@ struct OverlayView: View {
             case .recording:
                 recordingView
             case .transcribing:
-                // The system spinner draws its own grey and ignores .tint, so it
+                // TheThis is a demo transcription from Yazar. system spinner draws its own grey and ignores .tint, so it
                 // gets lifted toward white with a brightness filter instead.
                 ProgressView()
                     .controlSize(.small)
@@ -67,12 +67,17 @@ struct OverlayView: View {
 
     private var recordingView: some View {
         HStack(spacing: 8) {
-            HStack(alignment: .center, spacing: 2) {
-                ForEach(0..<7, id: \.self) { index in
-                    Capsule()
-                        .fill(.white)
-                        .frame(width: 2, height: barHeight(at: index))
+            TimelineView(.animation) { context in
+                HStack(alignment: .center, spacing: 2) {
+                    ForEach(0..<7, id: \.self) { index in
+                        Capsule()
+                            .fill(.white)
+                            .frame(width: 2, height: barHeight(at: index, time: context.date.timeIntervalSinceReferenceDate))
+                    }
                 }
+                // The wave itself is redrawn every frame; only the level jumps
+                // (every 33ms), so smooth that step and leave the sine alone.
+                .animation(.easeOut(duration: 0.09), value: yazar.level)
             }
             TimelineView(.periodic(from: .now, by: 0.1)) { context in
                 Text(elapsed(at: context.date), format: .number.precision(.fractionLength(1)))
@@ -96,8 +101,12 @@ struct OverlayView: View {
         max(0, date.timeIntervalSince(yazar.recordingStartedAt ?? date))
     }
 
-    private func barHeight(at index: Int) -> CGFloat {
-        let shape = [0.45, 0.7, 1.0, 0.75, 0.55, 0.85, 0.4][index]
-        return 3 + 12 * max(0.08, yazar.level) * shape
+    // Each bar rides the same sine at its own phase, so the row ripples left to
+    // right instead of scaling as one block. The mic level sets the amplitude;
+    // the envelope keeps the middle bars taller than the ends.
+    private func barHeight(at index: Int, time: TimeInterval) -> CGFloat {
+        let envelope = [0.6, 0.8, 1.0, 0.95, 0.85, 0.75, 0.6][index]
+        let wave = 0.5 + 0.5 * sin(time * 7 - Double(index) * 0.9)
+        return 3 + 17 * max(0.1, yazar.level) * envelope * (0.35 + 0.65 * wave)
     }
 }
