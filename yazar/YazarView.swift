@@ -85,13 +85,15 @@ struct YazarView: View {
     // Selecting the escape-hatch item opens the sheet instead of storing the sentinel.
     private var modelSelection: Binding<String> {
         Binding {
-            settings.model
+            settings.openRouterModel
         } set: { model in
             guard model == Self.customModelTag else {
-                settings.model = model
+                settings.openRouterModel = model
                 return
             }
-            customModel = suggestedModels.contains(settings.model) ? "" : settings.model
+            customModel = suggestedModels.contains(settings.openRouterModel)
+                ? ""
+                : settings.openRouterModel
             isAddingCustomModel = true
         }
     }
@@ -120,7 +122,7 @@ struct YazarView: View {
                 Button("Cancel") { isAddingCustomModel = false }
                     .keyboardShortcut(.cancelAction)
                 Button("Add") {
-                    settings.model = trimmedCustomModel
+                    settings.openRouterModel = trimmedCustomModel
                     isAddingCustomModel = false
                 }
                 .keyboardShortcut(.defaultAction)
@@ -138,62 +140,99 @@ struct YazarView: View {
     }
 
     private var generalSettings: some View {
-        settingsSection("OpenRouter") {
-            settingsRow(
-                "API key",
-                description: "Stored securely in your Mac's Keychain."
-            ) {
-                SecureField("Required", text: $settings.apiKey)
-                    .textFieldStyle(.roundedBorder)
-                    .textContentType(.password)
-                    .frame(width: 220)
-            }
-
-            if let error = settings.apiKeyError {
-                rowDivider
-                Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.red)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-            }
-
-            rowDivider
-
-            settingsRow(
-                "Model",
-                description: "OpenRouter model used to transcribe recordings."
-            ) {
-                Picker("Model", selection: modelSelection) {
-                    Section("Suggested Models") {
-                        ForEach(suggestedModels, id: \.self) { model in
-                            Text(model).tag(model)
-                        }
+        settingsSection("Transcription") {
+            settingsRow("Provider", description: providerDescription) {
+                Picker("Provider", selection: $settings.transcriptionProvider) {
+                    ForEach(TranscriptionProvider.allCases) { provider in
+                        Text(provider.displayName).tag(provider)
                     }
-
-                    if !suggestedModels.contains(settings.model) {
-                        Section("Custom Model") {
-                            Text(settings.model).tag(settings.model)
-                        }
-                    }
-
-                    Text("Add a Custom Model…").tag(Self.customModelTag)
                 }
                 .labelsHidden()
-                .frame(width: 220)
-                .sheet(isPresented: $isAddingCustomModel) { customModelSheet }
+                .frame(width: 220, alignment: .trailing)
+            }
+
+            if settings.transcriptionProvider == .openRouter {
+                rowDivider
+
+                settingsRow(
+                    "API key",
+                    description: "Stored securely in your Mac's Keychain."
+                ) {
+                    SecureField("Required", text: $settings.apiKey)
+                        .textFieldStyle(.roundedBorder)
+                        .textContentType(.password)
+                        .frame(width: 220)
+                }
+
+                if let error = settings.apiKeyError {
+                    rowDivider
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.red)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                }
+
+                rowDivider
+
+                settingsRow(
+                    "Model",
+                    description: "OpenRouter model used to transcribe recordings."
+                ) {
+                    Picker("Model", selection: modelSelection) {
+                        Section("Suggested Models") {
+                            ForEach(suggestedModels, id: \.self) { model in
+                                Text(model).tag(model)
+                            }
+                        }
+
+                        if !suggestedModels.contains(settings.openRouterModel) {
+                            Section("Custom Model") {
+                                Text(settings.openRouterModel).tag(settings.openRouterModel)
+                            }
+                        }
+
+                        Text("Add a Custom Model…").tag(Self.customModelTag)
+                    }
+                    .labelsHidden()
+                    .frame(width: 220)
+                    .sheet(isPresented: $isAddingCustomModel) { customModelSheet }
+                }
             }
 
             rowDivider
 
             settingsRow(
                 "Language",
-                description: "Leave blank to detect the spoken language."
+                description: languageDescription
             ) {
-                TextField("Auto-detect", text: $settings.language)
+                TextField(languagePlaceholder, text: $settings.language)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 220)
             }
+        }
+    }
+
+    private var providerDescription: String {
+        switch settings.transcriptionProvider {
+        case .appleSpeech:
+            "Processes audio on this Mac. macOS may fetch a language asset on first use."
+        case .openRouter:
+            "Sends each recording to OpenRouter for transcription."
+        }
+    }
+
+    private var languageDescription: String {
+        switch settings.transcriptionProvider {
+        case .appleSpeech: "Leave blank to use your Mac's current language."
+        case .openRouter: "Leave blank to detect the spoken language."
+        }
+    }
+
+    private var languagePlaceholder: String {
+        switch settings.transcriptionProvider {
+        case .appleSpeech: "System language"
+        case .openRouter: "Auto-detect"
         }
     }
 

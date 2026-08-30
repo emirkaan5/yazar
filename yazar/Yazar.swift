@@ -124,22 +124,27 @@ final class Yazar {
 
     private func finishRecording() {
         recorderPollingTask?.cancel()
-        let wav = recorder.stop()
+        let recording = recorder.stop()
         let demoMode = isDemoMode
         play(.stop)
         recordingStartedAt = nil
         level = 0
 
-        guard demoMode || Self.containsSpeech(wav) else {
+        guard demoMode || recording.containsSpeech else {
             showNoSpeech()
             return
         }
 
-        let transcriber = Transcriber(
-            apiKey: settings.apiKey,
-            model: settings.model,
-            language: settings.optionalLanguage
-        )
+        let transcriber: any Transcriber = switch settings.transcriptionProvider {
+        case .appleSpeech:
+            AppleSpeechTranscriber()
+        case .openRouter:
+            OpenRouterTranscriber(
+                apiKey: settings.apiKey,
+                model: settings.openRouterModel
+            )
+        }
+        let language = settings.optionalLanguage
         state = .transcribing
         transcriptionTask?.cancel()
         transcriptionTask = Task { [weak self] in
@@ -150,10 +155,10 @@ final class Yazar {
                     try await Task.sleep(for: .seconds(2))
                     text = "This is a demo transcription from Yazar."
                 } else {
-                    text = try await transcriber.transcribe(wav)
+                    text = try await transcriber.transcribe(recording, language: language)
                 }
 #else
-                text = try await transcriber.transcribe(wav)
+                text = try await transcriber.transcribe(recording, language: language)
 #endif
                 try Task.checkCancellation()
                 self?.deliver(text)
@@ -243,18 +248,4 @@ final class Yazar {
 #endif
     }
 
-    private static func containsSpeech(_ wav: Data) -> Bool {
-        let sampleCount = max(0, (wav.count - 44) / MemoryLayout<Int16>.size)
-        guard sampleCount >= 4_800 else { return false }
-
-        var sum = 0.0
-        wav.withUnsafeBytes { bytes in
-            for index in 0..<sampleCount {
-                let sample = bytes.loadUnaligned(fromByteOffset: 44 + index * 2, as: Int16.self)
-                let normalized = Double(Int16(littleEndian: sample)) / Double(Int16.max)
-                sum += normalized * normalized
-            }
-        }
-        return sqrt(sum / Double(sampleCount)) > 0.003
-    }
 }
