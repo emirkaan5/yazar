@@ -4,7 +4,7 @@ import Observation
 @MainActor
 @Observable
 final class Yazar {
-    enum State: Equatable {
+    enum State: Hashable {
         case idle
         case warmingUp
         case recording

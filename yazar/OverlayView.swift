@@ -6,59 +6,65 @@ struct OverlayView: View {
     // sessions, so the blur/fade is keyed off the idle transition, not onAppear.
     @State private var visible = false
 
-    static let panelSize = CGSize(width: 420, height: 76)
+    static let panelSize = CGSize(width: 420, height: 80)
 
     var body: some View {
-        Group {
-            switch yazar.state {
-            case .idle:
-                EmptyView()
-            case .warmingUp:
-                Image(systemName: "waveform")
-                    .symbolEffect(.pulse)
-                    .foregroundStyle(.secondary)
-            case .recording:
-                recordingView
-            case .transcribing:
-                // The system spinner draws its own grey and ignores .tint, so it
-                // gets lifted toward white with a brightness filter instead.
-                ProgressView()
-                    .controlSize(.small)
-                    .brightness(0.4)
-            case .noSpeech:
-                HStack(spacing: 6) {
-                    Image(systemName: "mic.slash")
-                    Text("No speech")
+        ZStack {
+            Group {
+                switch yazar.state {
+                case .idle:
+                    EmptyView()
+                case .warmingUp:
+                    Image(systemName: "waveform")
+                        .symbolEffect(.pulse)
+                        .foregroundStyle(.secondary)
+                case .recording:
+                    recordingView
+                case .transcribing:
+                    // The system spinner draws its own grey and ignores .tint, so it
+                    // gets lifted toward white with a brightness filter instead.
+                    ProgressView()
+                        .controlSize(.small)
+                        .brightness(0.4)
+                case .noSpeech:
+                    HStack(spacing: 6) {
+                        Image(systemName: "mic.slash")
+                        Text("No speech")
+                    }
+                    .foregroundStyle(.white)
+                case .copied:
+                    HStack(spacing: 6) {
+                        Image(systemName: "doc.on.clipboard")
+                        Text("Copied to clipboard")
+                    }
+                    .foregroundStyle(.white)
+                case .error(let message):
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                        Text(message)
+                            .lineLimit(3)
+                            .multilineTextAlignment(.leading)
+                    }
+                    .foregroundStyle(.white)
                 }
-                .foregroundStyle(.white)
-            case .copied:
-                HStack(spacing: 6) {
-                    Image(systemName: "doc.on.clipboard")
-                    Text("Copied to clipboard")
-                }
-                .foregroundStyle(.white)
-            case .error(let message):
-                HStack(spacing: 6) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                    Text(message)
-                        .lineLimit(3)
-                        .multilineTextAlignment(.leading)
-                }
-                .foregroundStyle(.white)
             }
+            .id(yazar.state)
+            .transition(.blurReplace)
         }
-        .font(.system(size: 11, weight: .medium))
+        .animation(.easeInOut(duration: 0.18), value: yazar.state)
+        .font(.system(size: 13, weight: .regular))
         // The capsule is always dark, so pin the content to dark appearance:
         // the transcribing spinner and the `.secondary` waveform stay light
         // even when the system is in light mode.
         .environment(\.colorScheme, .dark)
         .padding(.horizontal, 12)
-        .frame(width: capsuleSize.width, height: capsuleSize.height)
-        .background(backgroundColor, in: Capsule())
         // Entrance: the capsule extends vertically from a sliver to full height,
         // clipping (not squashing) the content while it grows.
+        .frame(width: capsuleSize.width, height: capsuleSize.height)
+        .background(backgroundColor, in: Capsule())
         .frame(height: visible ? capsuleSize.height : 5)
         .clipShape(Capsule())
+        .animation(.spring(duration: 0.4, bounce: 0.4), value: capsuleSize)
         .blur(radius: visible ? 0 : 10)
         .opacity(visible ? 1 : 0)
         // Pins the capsule to the centre of the panel so the height change
@@ -101,8 +107,8 @@ struct OverlayView: View {
     private var capsuleSize: CGSize {
         switch yazar.state {
         case .error: CGSize(width: 400, height: 58)
-        case .copied: CGSize(width: 170, height: 30)
-        default: CGSize(width: 115, height: 30)
+        case .copied: CGSize(width: 185, height: 35)
+        default: CGSize(width: 115, height: 35)
         }
     }
 
