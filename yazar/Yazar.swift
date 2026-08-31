@@ -115,14 +115,30 @@ final class Yazar {
         }
     }
 
+    /// Drives the meter, and is also what notices a microphone that never starts
+    /// or stops part-way. Without it a device unplugged mid-hold just delivers no
+    /// samples, and the empty recording fails the speech gate — so a hardware
+    /// problem reads to the user as "No speech".
     private func startPollingRecorder() {
         recorderPollingTask?.cancel()
         recorderPollingTask = Task { [weak self] in
+            // A reused session starts in ~100 ms and the first buffer follows
+            // immediately; three seconds means it is not coming.
+            let firstBufferDeadline = ContinuousClock.now + .seconds(3)
             while !Task.isCancelled {
                 guard let self else { return }
                 let snapshot = recorder.poll()
                 level = snapshot.level
-                if snapshot.receivedFirstBuffer { receivedFirstBuffer() }
+                if snapshot.receivedFirstBuffer {
+                    receivedFirstBuffer()
+                    guard snapshot.isCapturing else {
+                        fail(.recorder(.captureInterrupted))
+                        return
+                    }
+                } else if ContinuousClock.now >= firstBufferDeadline {
+                    fail(.recorder(.microphoneUnavailable))
+                    return
+                }
                 try? await Task.sleep(for: .milliseconds(33))
             }
         }

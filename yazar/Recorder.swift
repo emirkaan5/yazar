@@ -5,11 +5,13 @@ import Synchronization
 enum RecorderError: LocalizedError, Hashable {
     case microphoneUnavailable
     case captureSetupFailed
+    case captureInterrupted
 
     var errorDescription: String? {
         switch self {
         case .microphoneUnavailable: "Yazar could not open the microphone."
         case .captureSetupFailed: "Yazar could not set up audio capture."
+        case .captureInterrupted: "The microphone stopped responding."
         }
     }
 }
@@ -28,6 +30,9 @@ final class Recorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
     struct Snapshot {
         let receivedFirstBuffer: Bool
         let level: Double
+        /// False once the session has stopped, which is how an unplugged device
+        /// shows up: sample delivery simply ends.
+        let isCapturing: Bool
     }
 
     private let recording = Atomic(false)
@@ -61,7 +66,8 @@ final class Recorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
     func poll() -> Snapshot {
         Snapshot(
             receivedFirstBuffer: receivedFirstBuffer.load(ordering: .relaxed),
-            level: level.load(ordering: .relaxed)
+            level: level.load(ordering: .relaxed),
+            isCapturing: session?.isRunning ?? false
         )
     }
 

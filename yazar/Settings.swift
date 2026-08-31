@@ -29,15 +29,11 @@ final class Settings {
         didSet { defaults.set(openRouterModel, forKey: Key.model) }
     }
 
+    /// Raw text-field contents. `optionalLanguage` is the canonical reading of
+    /// it, and persistence goes through that too, so the rule for what counts as
+    /// "no language" is written once. A nil value clears the key.
     var language: String {
-        didSet {
-            let trimmed = language.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.isEmpty {
-                defaults.removeObject(forKey: Key.language)
-            } else {
-                defaults.set(trimmed, forKey: Key.language)
-            }
-        }
+        didSet { defaults.set(optionalLanguage, forKey: Key.language) }
     }
 
     var playSounds: Bool {
