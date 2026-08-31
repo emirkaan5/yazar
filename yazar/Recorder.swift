@@ -20,19 +20,15 @@ enum RecorderError: LocalizedError {
 /// Bluetooth output device into the graph and the HAL logs StartIO failures. Pinning the
 /// engine to one device breaks it (input and output share a single AUHAL, which then
 /// reports canPerformIO == false). AVCaptureSession opens the input device alone.
-final class Recorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate, @unchecked Sendable {
+///
+/// Session control is main-actor work. Sample delivery is not, and lives in `CaptureSink`;
+/// `captureOutput` is the one nonisolated member, because AVFoundation calls it on
+/// `captureQueue`.
+final class Recorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
     struct Snapshot {
         let receivedFirstBuffer: Bool
         let level: Double
     }
-
-    // Fixed 16 kHz mono LPCM. These arguments are always valid, so the initialiser cannot fail.
-    private static let outputFormat = AVAudioFormat(
-        commonFormat: .pcmFormatInt16,
-        sampleRate: Double(Recording.sampleRate),
-        channels: 1,
-        interleaved: true
-    )!
 
     private let recording = Atomic(false)
     private let receivedFirstBuffer = Atomic(false)
@@ -43,25 +39,14 @@ final class Recorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate, @u
     // Sample delivery, and the barrier stop() syncs on to flush an in-flight callback.
     private let captureQueue = DispatchQueue(label: "yazar.capture.samples")
 
-    // Main actor only.
+    private let sink = CaptureSink()
+
     private var session: AVCaptureSession?
     private var sessionInputID: String?
 
-    // captureQueue only.
-    private var samples = Data()
-    private var converter: AVAudioConverter?
-    private var converterInputFormat: AVAudioFormat?
-    private var outputBuffer: AVAudioPCMBuffer?
-
-    deinit {
-        session?.stopRunning()
-    }
-
     func start(inputID: String) throws {
         recording.store(false, ordering: .sequentiallyConsistent)
-        captureQueue.sync {
-            samples.removeAll(keepingCapacity: true)
-        }
+        captureQueue.sync { sink.reset() }
         receivedFirstBuffer.store(false, ordering: .relaxed)
         level.store(0, ordering: .relaxed)
 
@@ -70,9 +55,7 @@ final class Recorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate, @u
         self.session = session
         sessionInputID = inputID
         recording.store(true, ordering: .sequentiallyConsistent)
-        sessionQueue.async {
-            if !session.isRunning { session.startRunning() }
-        }
+        startRunning(session)
     }
 
     func poll() -> Snapshot {
@@ -85,7 +68,7 @@ final class Recorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate, @u
     func stop() -> Recording {
         recording.store(false, ordering: .sequentiallyConsistent)
         stopSession()
-        let pcm = captureQueue.sync { samples }
+        let pcm = captureQueue.sync { sink.drain() }
         level.store(0, ordering: .relaxed)
         return Recording(pcm16: pcm)
     }
@@ -93,9 +76,7 @@ final class Recorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate, @u
     func cancel() {
         recording.store(false, ordering: .sequentiallyConsistent)
         stopSession()
-        captureQueue.sync {
-            samples.removeAll(keepingCapacity: true)
-        }
+        captureQueue.sync { sink.reset() }
         receivedFirstBuffer.store(false, ordering: .relaxed)
         level.store(0, ordering: .relaxed)
     }
@@ -103,11 +84,7 @@ final class Recorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate, @u
     func shutDown() {
         cancel()
         discardSession()
-        captureQueue.sync {
-            converter = nil
-            converterInputFormat = nil
-            outputBuffer = nil
-        }
+        captureQueue.sync { sink.discardConverter() }
     }
 
     private func discardSession() {
@@ -117,9 +94,7 @@ final class Recorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate, @u
         for output in session.outputs as? [AVCaptureAudioDataOutput] ?? [] {
             output.setSampleBufferDelegate(nil, queue: nil)
         }
-        sessionQueue.async {
-            session.stopRunning()
-        }
+        stopRunning(session)
     }
 
     /// Built once and reused. The microphone indicator only lights while the session runs,
@@ -145,12 +120,27 @@ final class Recorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate, @u
 
     private func stopSession() {
         guard let session else { return }
+        stopRunning(session)
+    }
+
+    // AVCaptureSession is not Sendable, but startRunning/stopRunning are the two
+    // members Apple documents as callable from any thread, and sessionQueue
+    // serialises them. The unsafe binding says exactly that and nothing wider.
+    private func startRunning(_ session: AVCaptureSession) {
+        nonisolated(unsafe) let session = session
+        sessionQueue.async {
+            if !session.isRunning { session.startRunning() }
+        }
+    }
+
+    private func stopRunning(_ session: AVCaptureSession) {
+        nonisolated(unsafe) let session = session
         sessionQueue.async {
             if session.isRunning { session.stopRunning() }
         }
     }
 
-    func captureOutput(
+    nonisolated func captureOutput(
         _ output: AVCaptureOutput,
         didOutput sampleBuffer: CMSampleBuffer,
         from connection: AVCaptureConnection
@@ -198,61 +188,9 @@ final class Recorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate, @u
                 bufferListNoCopy: list,
                 deallocator: nil
             ), source.frameLength > 0 else { return }
-            consume(source, inputFormat: inputFormat)
+            guard let appendedLevel = sink.append(source, inputFormat: inputFormat) else { return }
+            level.store(appendedLevel, ordering: .relaxed)
+            receivedFirstBuffer.store(true, ordering: .relaxed)
         }
-    }
-
-    private func consume(_ source: AVAudioPCMBuffer, inputFormat: AVAudioFormat) {
-        if converter == nil || converterInputFormat != inputFormat {
-            converter = AVAudioConverter(from: inputFormat, to: Self.outputFormat)
-            converterInputFormat = inputFormat
-            outputBuffer = nil
-        }
-        guard let converter else { return }
-
-        let ratio = Self.outputFormat.sampleRate / inputFormat.sampleRate
-        let needed = AVAudioFrameCount(ceil(Double(source.frameLength) * ratio)) + 32
-        if outputBuffer == nil || outputBuffer!.frameCapacity < needed {
-            outputBuffer = AVAudioPCMBuffer(pcmFormat: Self.outputFormat, frameCapacity: needed)
-        }
-        guard let output = outputBuffer else { return }
-
-        output.frameLength = 0
-        var suppliedInput = false
-        var conversionError: NSError?
-        let status = converter.convert(to: output, error: &conversionError) { _, inputStatus in
-            if suppliedInput {
-                inputStatus.pointee = .noDataNow
-                return nil
-            }
-            suppliedInput = true
-            inputStatus.pointee = .haveData
-            return source
-        }
-        guard conversionError == nil,
-              status != .error,
-              output.frameLength > 0,
-              let channel = output.int16ChannelData else { return }
-
-        let count = Int(output.frameLength)
-        samples.append(
-            UnsafeRawPointer(channel[0]).assumingMemoryBound(to: UInt8.self),
-            count: count * MemoryLayout<Int16>.size
-        )
-
-        level.store(Self.rms(of: channel[0], count: count), ordering: .relaxed)
-        receivedFirstBuffer.store(true, ordering: .relaxed)
-    }
-
-    private static func rms(of samples: UnsafePointer<Int16>, count: Int) -> Double {
-        guard count > 0 else { return 0 }
-        var sum = 0.0
-        for index in 0..<count {
-            let sample = Double(samples[index]) / Double(Int16.max)
-            sum += sample * sample
-        }
-        // Speech RMS sits around 0.02-0.15, so a plain linear gain leaves the
-        // meter pinned near the bottom. The power curve expands the quiet end.
-        return min(1, pow(sqrt(sum / Double(count)) * 6, 0.65))
     }
 }

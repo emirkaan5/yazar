@@ -2,7 +2,7 @@ import Foundation
 
 /// A complete microphone capture in Yazar's canonical 16 kHz mono, signed
 /// 16-bit little-endian PCM format.
-struct Recording: Sendable {
+nonisolated struct Recording: Sendable {
     static let sampleRate = 16_000
 
     let pcm16: Data
@@ -46,7 +46,7 @@ struct Recording: Sendable {
     }
 }
 
-private extension Data {
+private nonisolated extension Data {
     mutating func appendLittleEndian<Value: FixedWidthInteger>(_ value: Value) {
         var littleEndian = value.littleEndian
         Swift.withUnsafeBytes(of: &littleEndian) { append(contentsOf: $0) }
