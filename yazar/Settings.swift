@@ -6,6 +6,7 @@ import Security
 @Observable
 final class Settings {
     private enum Key {
+        static let transcriptionProvider = "transcriptionProvider"
         static let model = "model"
         static let language = "language"
         static let playSounds = "playSounds"
@@ -18,8 +19,14 @@ final class Settings {
 
     private let defaults: UserDefaults
 
-    var model: String {
-        didSet { defaults.set(model, forKey: Key.model) }
+    var transcriptionProvider: TranscriptionProvider {
+        didSet {
+            defaults.set(transcriptionProvider.rawValue, forKey: Key.transcriptionProvider)
+        }
+    }
+
+    var openRouterModel: String {
+        didSet { defaults.set(openRouterModel, forKey: Key.model) }
     }
 
     var language: String {
@@ -72,7 +79,10 @@ final class Settings {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        model = defaults.string(forKey: Key.model) ?? "openai/whisper-1"
+        transcriptionProvider = defaults.string(forKey: Key.transcriptionProvider)
+            .flatMap(TranscriptionProvider.init(rawValue:))
+            ?? .openRouter
+        openRouterModel = defaults.string(forKey: Key.model) ?? "openai/whisper-1"
         language = defaults.string(forKey: Key.language) ?? ""
         playSounds = defaults.object(forKey: Key.playSounds) == nil
             ? true

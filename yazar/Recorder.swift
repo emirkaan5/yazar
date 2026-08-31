@@ -26,11 +26,10 @@ final class Recorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate, @u
         let level: Double
     }
 
-    private static let sampleRate = 16_000
     // Fixed 16 kHz mono LPCM. These arguments are always valid, so the initialiser cannot fail.
     private static let outputFormat = AVAudioFormat(
         commonFormat: .pcmFormatInt16,
-        sampleRate: Double(sampleRate),
+        sampleRate: Double(Recording.sampleRate),
         channels: 1,
         interleaved: true
     )!
@@ -83,12 +82,12 @@ final class Recorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate, @u
         )
     }
 
-    func stop() -> Data {
+    func stop() -> Recording {
         recording.store(false, ordering: .sequentiallyConsistent)
         stopSession()
         let pcm = captureQueue.sync { samples }
         level.store(0, ordering: .relaxed)
-        return Self.wav(from: pcm)
+        return Recording(pcm16: pcm)
     }
 
     func cancel() {
@@ -255,31 +254,5 @@ final class Recorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate, @u
         // Speech RMS sits around 0.02-0.15, so a plain linear gain leaves the
         // meter pinned near the bottom. The power curve expands the quiet end.
         return min(1, pow(sqrt(sum / Double(count)) * 6, 0.65))
-    }
-
-    private static func wav(from pcm: Data) -> Data {
-        var wav = Data(capacity: 44 + pcm.count)
-        wav.append(contentsOf: "RIFF".utf8)
-        wav.appendLittleEndian(UInt32(36 + pcm.count))
-        wav.append(contentsOf: "WAVE".utf8)
-        wav.append(contentsOf: "fmt ".utf8)
-        wav.appendLittleEndian(UInt32(16))
-        wav.appendLittleEndian(UInt16(1))
-        wav.appendLittleEndian(UInt16(1))
-        wav.appendLittleEndian(UInt32(sampleRate))
-        wav.appendLittleEndian(UInt32(sampleRate * 2))
-        wav.appendLittleEndian(UInt16(2))
-        wav.appendLittleEndian(UInt16(16))
-        wav.append(contentsOf: "data".utf8)
-        wav.appendLittleEndian(UInt32(pcm.count))
-        wav.append(pcm)
-        return wav
-    }
-}
-
-private extension Data {
-    mutating func appendLittleEndian<Value: FixedWidthInteger>(_ value: Value) {
-        var littleEndian = value.littleEndian
-        Swift.withUnsafeBytes(of: &littleEndian) { append(contentsOf: $0) }
     }
 }
