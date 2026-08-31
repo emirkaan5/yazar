@@ -4,8 +4,6 @@ set -euo pipefail
 
 bundle_id="egeis.yazar"
 keychain_service="ai.yazar.credentials"
-# Accounts are TranscriptionProvider raw values; add new providers here.
-keychain_accounts=(openRouter)
 # The single-slot layout Yazar shipped first, cleared too so a reset is a reset
 # even on a machine that has not launched the migrating build yet.
 legacy_keychain_service="ai.yazar.openrouter"
@@ -23,9 +21,13 @@ delete_password() {
   fi
 }
 
-for account in "${keychain_accounts[@]}"; do
-  delete_password "$keychain_service" "$account"
-done
+delete_passwords_for_service() {
+  while security find-generic-password -s "$1" >/dev/null 2>&1; do
+    security delete-generic-password -s "$1" >/dev/null
+  done
+}
+
+delete_passwords_for_service "$keychain_service"
 delete_password "$legacy_keychain_service" "$legacy_keychain_account"
 
 tccutil reset Microphone "$bundle_id"

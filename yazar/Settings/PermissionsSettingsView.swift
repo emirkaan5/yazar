@@ -48,7 +48,8 @@ struct PermissionsSettingsView: View {
                 ) {
                     GrantedLabel("Listening")
                 }
-            } else if permissions.isReady(for: settings.dictationTrigger) {
+            } else if permissions.allGranted &&
+                        (!settings.dictationTrigger.usesFn || permissions.fnConfigured) {
                 RowDivider()
 
                 SettingsRow(

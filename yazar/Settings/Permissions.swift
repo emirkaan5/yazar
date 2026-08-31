@@ -18,12 +18,6 @@ final class Permissions {
 
     var fnConfigured: Bool { fnUsage == 0 }
 
-    /// The Globe key only has to be freed up when it is the dictation key, so
-    /// readiness depends on which trigger is selected rather than on Fn always.
-    func isReady(for trigger: DictationTrigger) -> Bool {
-        allGranted && (!trigger.usesFn || fnConfigured)
-    }
-
     func refresh() {
         microphoneGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
         accessibilityGranted = AXIsProcessTrusted()
@@ -57,25 +51,25 @@ final class Permissions {
         refresh()
     }
 
-    /// Watches for the grants Yazar is still missing, and stops once it has them
-    /// all. Nothing polls after that: a menu-bar app lives for days, and there is
-    /// no reason to keep asking the system a question that has been answered.
-    ///
-    /// The trade is that a permission revoked while Yazar runs goes unnoticed
-    /// until the next launch.
-    /// The trigger is read once, when polling starts. Changing it needs the
-    /// settings window, and by then something is already watching readiness.
-    func startPolling(until trigger: DictationTrigger) {
-        guard pollTask == nil, !isReady(for: trigger) else { return }
+    /// Refreshes system state until the app's current readiness gate starts the
+    /// engine and stops polling. The gate owns the trigger; this object only owns
+    /// the system values it can refresh.
+    func startPolling() {
+        guard pollTask == nil else { return }
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(2))
-                guard let self else { return }
+                guard !Task.isCancelled, let self else { return }
                 refresh()
-                if isReady(for: trigger) { break }
             }
-            self?.pollTask = nil
         }
+    }
+
+    /// A running engine no longer needs onboarding state refreshed. Permission
+    /// revocation after this point remains a next-launch concern.
+    func stopPolling() {
+        pollTask?.cancel()
+        pollTask = nil
     }
 
     func openKeyboardSettings() {

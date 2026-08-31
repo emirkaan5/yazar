@@ -49,12 +49,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
+    /// The system requirements for the trigger selected right now. Keeping this
+    /// beside engine startup means polling only has to publish system state.
+    private var isReadyToStart: Bool {
+        permissions.allGranted &&
+            (!settings.dictationTrigger.usesFn || permissions.fnConfigured)
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
-        if permissions.isReady(for: settings.dictationTrigger) {
+        if isReadyToStart {
             startEngine()
         } else {
             showApp(page: .permissions)
-            permissions.startPolling(until: settings.dictationTrigger)
+            permissions.startPolling()
             startEngineWhenReady()
         }
     }
@@ -125,6 +132,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// Builds the overlay once and claims the hot key. Safe to call again after a
     /// failed attempt, since HotKey.start() is a no-op once the tap exists.
     private func startEngine() {
+        permissions.stopPolling()
         if overlayPanel == nil {
             overlayPanel = OverlayPanel(yazar: yazar)
         }
@@ -140,12 +148,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// permissions screen stays as the fallback for when the tap still fails.
     private func startEngineWhenReady() {
         withObservationTracking {
-            _ = permissions.isReady(for: settings.dictationTrigger)
+            _ = isReadyToStart
         } onChange: { [weak self] in
             // onChange fires before the new value lands, so re-read on the main actor.
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                if permissions.isReady(for: settings.dictationTrigger) {
+                if isReadyToStart {
                     startEngine()
                 } else {
                     startEngineWhenReady()
