@@ -232,18 +232,18 @@ final class Yazar {
         resetState(after: .seconds(2.5))
     }
 
-    /// Paste into the focused text field when there is one; otherwise the
-    /// transcription waits on the clipboard and the overlay says so, so a
-    /// dictation aimed at a non-text target is never silently dropped. A
-    /// provider that recognized nothing lands in the same place as audio that
-    /// never cleared the speech gate.
+    /// Attempt to paste into the focused application when event-posting permission
+    /// allows it. When the target cannot be identified as editable, keep the
+    /// transcription on the clipboard and say so even though the shortcut was
+    /// attempted. A provider that recognized nothing lands in the same place as
+    /// audio that never cleared the speech gate.
     private func deliver(_ text: String) {
         guard !text.isEmpty else {
             showNoSpeech()
             return
         }
         switch Inserter.insert(text, restoringClipboard: settings.restoreClipboard) {
-        case .pasted:
+        case .pasteAttempted:
             state = .idle
         case .copied:
             state = .copied
