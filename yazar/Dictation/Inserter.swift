@@ -4,37 +4,48 @@ import CoreGraphics
 
 @MainActor
 enum Inserter {
-    /// Where a transcription ended up. Pasting needs Accessibility trust *and* a
-    /// focused text field; when either is missing the text waits on the clipboard
-    /// instead of being dropped.
+    /// What the inserter can report synchronously. Posting Command-V does not
+    /// confirm that the focused application consumed it.
     enum Outcome {
-        case pasted
+        /// Command-V was posted to a target AX identifies as editable.
+        case pasteAttempted
+        /// The transcription remains current on the clipboard. Command-V may
+        /// also have been posted when target evidence was inconclusive.
         case copied
         case clipboardUnavailable
     }
 
     // ⌘V is the only insertion path that works across native, web and Electron
-    // text fields, so the text goes on the clipboard either way; the focused
-    // element only decides whether we also press the keys.
+    // text fields as well as custom-rendered editors, so the text goes on the
+    // clipboard either way. AX metadata can identify some editable controls but
+    // cannot rule out custom ones, so missing evidence never blocks the shortcut.
     //
-    // When the text is pasted the clipboard was only a transport, so its previous
-    // contents go back afterwards. When it is left behind for the user to paste
-    // themselves, the transcription is the delivery and stays put.
+    // Positive target evidence makes best-effort restoration reasonable. When
+    // the target is unknown, the transcription stays available for manual paste
+    // whether or not the application consumed the synthetic shortcut.
     static func insert(_ text: String, restoringClipboard: Bool) -> Outcome {
+        let hasEditableTargetEvidence = focusedElementProvidesTextEvidence()
         let pasteboard = NSPasteboard.general
         let snapshot = restoringClipboard ? ClipboardSnapshot(pasteboard) : nil
         pasteboard.clearContents()
-        guard pasteboard.setString(text, forType: .string) else { return .clipboardUnavailable }
-        guard focusedElementAcceptsText() else { return .copied }
+        guard pasteboard.setString(text, forType: .string) else {
+            snapshot?.restore()
+            return .clipboardUnavailable
+        }
+        guard AXIsProcessTrusted(), CGPreflightPostEventAccess() else { return .copied }
         let transcriptionChangeCount = pasteboard.changeCount
 
         let source = CGEventSource(stateID: .privateState)
-        let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: true)
-        let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: false)
-        keyDown?.flags = .maskCommand
-        keyUp?.flags = .maskCommand
-        keyDown?.post(tap: .cghidEventTap)
-        keyUp?.post(tap: .cghidEventTap)
+        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: false) else {
+            return .copied
+        }
+        keyDown.flags = .maskCommand
+        keyUp.flags = .maskCommand
+        keyDown.post(tap: .cghidEventTap)
+        keyUp.post(tap: .cghidEventTap)
+
+        guard hasEditableTargetEvidence else { return .copied }
 
         if let snapshot {
             Task { @MainActor in
@@ -45,7 +56,7 @@ enum Inserter {
                 snapshot.restore(ifUnchangedFrom: transcriptionChangeCount)
             }
         }
-        return .pasted
+        return .pasteAttempted
     }
 
     /// A copy of the pasteboard's concrete contents.
@@ -69,6 +80,16 @@ enum Inserter {
         func restore(ifUnchangedFrom changeCount: Int) {
             let pasteboard = NSPasteboard.general
             guard pasteboard.changeCount == changeCount else { return }
+            restore(to: pasteboard)
+        }
+
+        /// Puts the contents back without a change-count check. Use this when a
+        /// clipboard write has already failed synchronously.
+        func restore() {
+            restore(to: .general)
+        }
+
+        private func restore(to pasteboard: NSPasteboard) {
             let restored = items.map { contents in
                 let item = NSPasteboardItem()
                 for (type, data) in contents {
@@ -90,10 +111,10 @@ enum Inserter {
         kAXComboBoxRole as String
     ]
 
-    /// True when ⌘V would land somewhere. Returns false when the Accessibility
-    /// API is unavailable, which is the right answer: posting the key event needs
-    /// the same trust the query does.
-    private static func focusedElementAcceptsText() -> Bool {
+    /// Positive evidence that the focused AX element represents editable text.
+    /// False means unknown, not unpasteable, so callers must not use it to veto
+    /// a Command-V attempt.
+    private static func focusedElementProvidesTextEvidence() -> Bool {
         var focusedValue: CFTypeRef?
         guard AXUIElementCopyAttributeValue(
             AXUIElementCreateSystemWide(),
@@ -106,23 +127,33 @@ enum Inserter {
         }
         let focusedElement = focusedValue as! AXUIElement
 
-        var roleValue: CFTypeRef?
-        if AXUIElementCopyAttributeValue(
+        var selectedTextIsSettable = DarwinBoolean(false)
+        if AXUIElementIsAttributeSettable(
             focusedElement,
-            kAXRoleAttribute as CFString,
-            &roleValue
-        ) == .success, let role = roleValue as? String, textRoles.contains(role) {
+            kAXSelectedTextAttribute as CFString,
+            &selectedTextIsSettable
+        ) == .success, selectedTextIsSettable.boolValue {
             return true
         }
 
-        // Web and Electron editors report generic roles (AXGroup, AXWebArea) and
-        // refuse to make AXSelectedText settable, but they do publish a selection
-        // range. A Finder icon or a game view publishes neither.
-        var rangeValue: CFTypeRef?
-        return AXUIElementCopyAttributeValue(
+        var roleValue: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
             focusedElement,
-            kAXSelectedTextRangeAttribute as CFString,
-            &rangeValue
-        ) == .success
+            kAXRoleAttribute as CFString,
+            &roleValue
+        ) == .success,
+              let role = roleValue as? String,
+              textRoles.contains(role) else {
+            return false
+        }
+
+        // A text role alone can describe a read-only control. A writable value
+        // is the positive evidence that makes clipboard restoration reasonable.
+        var valueIsSettable = DarwinBoolean(false)
+        return AXUIElementIsAttributeSettable(
+            focusedElement,
+            kAXValueAttribute as CFString,
+            &valueIsSettable
+        ) == .success && valueIsSettable.boolValue
     }
 }
