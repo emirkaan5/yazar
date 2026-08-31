@@ -202,10 +202,12 @@ final class Yazar {
 
     /// Paste into the focused text field when there is one; otherwise the
     /// transcription waits on the clipboard and the overlay says so, so a
-    /// dictation aimed at a non-text target is never silently dropped.
+    /// dictation aimed at a non-text target is never silently dropped. A
+    /// provider that recognized nothing lands in the same place as audio that
+    /// never cleared the speech gate.
     private func deliver(_ text: String) {
         guard !text.isEmpty else {
-            state = .idle
+            showNoSpeech()
             return
         }
         switch Inserter.insert(text) {

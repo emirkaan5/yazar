@@ -7,6 +7,7 @@ struct YazarView: View {
     @Bindable var settings: Settings
     @Bindable var permissions: Permissions
     @Binding private var selection: AppPage
+    @State private var speechModel = AppleSpeechModel()
     @State private var customModel = ""
     @State private var isAddingCustomModel = false
     @FocusState private var customModelFocused: Bool
@@ -74,12 +75,15 @@ struct YazarView: View {
             if selection == .permissions {
                 refreshPermissions()
             }
+            refreshSpeechModel()
         }
         .onChange(of: selection) { _, page in
             if page == .permissions {
                 refreshPermissions()
             }
         }
+        .onChange(of: settings.transcriptionProvider) { _, _ in refreshSpeechModel() }
+        .onChange(of: settings.language) { _, _ in refreshSpeechModel() }
     }
 
     // Selecting the escape-hatch item opens the sheet instead of storing the sentinel.
@@ -210,6 +214,66 @@ struct YazarView: View {
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 220)
             }
+
+            if settings.transcriptionProvider == .appleSpeech {
+                rowDivider
+
+                settingsRow("Language model", description: speechModelDescription) {
+                    speechModelControl
+                }
+            }
+        }
+    }
+
+    private func refreshSpeechModel() {
+        guard settings.transcriptionProvider == .appleSpeech else { return }
+        speechModel.refresh(language: settings.optionalLanguage)
+    }
+
+    /// The resolved locale once Apple Speech accepts the language, so the row
+    /// names the model that will run rather than what was typed; the requested
+    /// language otherwise, so an unsupported one is still named.
+    private var speechModelLanguage: String {
+        if let locale = speechModel.locale {
+            return AppleSpeechTranscriber.displayName(for: locale)
+        }
+        return AppleSpeechTranscriber.displayName(for: settings.optionalLanguage)
+    }
+
+    private var speechModelDescription: String {
+        switch speechModel.state {
+        case .checking:
+            "Checking the on-device model for \(speechModelLanguage)."
+        case .unsupported:
+            "Apple Speech has no model for \(speechModelLanguage). Choose another language."
+        case .notInstalled:
+            "macOS downloads the \(speechModelLanguage) model on first use, or fetch it now."
+        case .downloading:
+            "Downloading the \(speechModelLanguage) model."
+        case .installed:
+            "The \(speechModelLanguage) model is on this Mac."
+        case .failed(let message):
+            message
+        }
+    }
+
+    @ViewBuilder
+    private var speechModelControl: some View {
+        switch speechModel.state {
+        case .checking, .downloading:
+            ProgressView()
+                .controlSize(.small)
+        case .unsupported:
+            Label("Unsupported", systemImage: "exclamationmark.triangle.fill")
+                .font(.system(size: 12))
+                .foregroundStyle(.orange)
+        case .notInstalled, .failed:
+            Button("Download") { speechModel.download() }
+                .buttonStyle(.bordered)
+        case .installed:
+            Label("Downloaded", systemImage: "checkmark.circle.fill")
+                .font(.system(size: 12))
+                .foregroundStyle(.green)
         }
     }
 
