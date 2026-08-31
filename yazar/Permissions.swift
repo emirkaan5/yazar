@@ -52,13 +52,22 @@ final class Permissions {
         refresh()
     }
 
+    /// Watches for the grants Yazar is still missing, and stops once it has them
+    /// all. Nothing polls after that: a menu-bar app lives for days, and there is
+    /// no reason to keep asking the system a question that has been answered.
+    ///
+    /// The trade is that a permission revoked while Yazar runs goes unnoticed
+    /// until the next launch.
     func startPolling() {
-        pollTask?.cancel()
+        guard pollTask == nil, !readyToUse else { return }
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(2))
-                self?.refresh()
+                guard let self else { return }
+                refresh()
+                if readyToUse { break }
             }
+            self?.pollTask = nil
         }
     }
 

@@ -6,6 +6,7 @@ struct YazarView: View {
 
     @Bindable var settings: Settings
     @Bindable var permissions: Permissions
+    let yazar: Yazar
     @Binding private var selection: AppPage
     @State private var speechModel = AppleSpeechModel()
     @State private var customModel = ""
@@ -14,8 +15,6 @@ struct YazarView: View {
 
     // Sentinel selection for the pop-up's escape-hatch item; never reaches Settings.
     private static let customModelTag = "\u{0}add-custom-model"
-
-    private let triggerDemoError: () -> Void
 
     private let suggestedModels = [
         "openai/gpt-transcribe",
@@ -27,13 +26,13 @@ struct YazarView: View {
     init(
         settings: Settings,
         permissions: Permissions,
-        selection: Binding<AppPage> = .constant(.general),
-        triggerDemoError: @escaping () -> Void
+        yazar: Yazar,
+        selection: Binding<AppPage> = .constant(.general)
     ) {
         self.settings = settings
         self.permissions = permissions
+        self.yazar = yazar
         _selection = selection
-        self.triggerDemoError = triggerDemoError
     }
 
     var body: some View {
@@ -73,13 +72,13 @@ struct YazarView: View {
         .ignoresSafeArea(.container)
         .onAppear {
             if selection == .permissions {
-                refreshPermissions()
+                permissions.refresh()
             }
             refreshSpeechModel()
         }
         .onChange(of: selection) { _, page in
             if page == .permissions {
-                refreshPermissions()
+                permissions.refresh()
             }
         }
         .onChange(of: settings.transcriptionProvider) { _, _ in refreshSpeechModel() }
@@ -138,10 +137,7 @@ struct YazarView: View {
         .onAppear { customModelFocused = true }
     }
 
-    private func refreshPermissions() {
-        permissions.refresh()
-        permissions.startPolling()
-    }
+
 
     private var generalSettings: some View {
         settingsSection("Transcription") {
@@ -364,7 +360,7 @@ struct YazarView: View {
                 "Error mode",
                 description: "Show the error state used when transcription fails."
             ) {
-                Button("Trigger error mode", action: triggerDemoError)
+                Button("Trigger error mode") { yazar.triggerDemoError() }
                     .buttonStyle(.bordered)
             }
 #endif
@@ -401,12 +397,23 @@ struct YazarView: View {
                 action: permissions.openKeyboardSettings
             )
 
-            if permissions.readyToUse {
+            if yazar.isListening {
                 rowDivider
 
                 settingsRow(
                     "Ready to use",
-                    description: "Relaunch Yazar to start listening."
+                    description: "Yazar is listening for the dictation key."
+                ) {
+                    Label("Listening", systemImage: "checkmark.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.green)
+                }
+            } else if permissions.readyToUse {
+                rowDivider
+
+                settingsRow(
+                    "Ready to use",
+                    description: "Yazar could not claim the dictation key. Relaunch to try again."
                 ) {
                     Button("Relaunch") { permissions.relaunch() }
                         .buttonStyle(.borderedProminent)
@@ -511,6 +518,6 @@ enum AppPage: CaseIterable, Identifiable {
     YazarView(
         settings: Settings(),
         permissions: Permissions(),
-        triggerDemoError: {}
+        yazar: Yazar(settings: Settings())
     )
 }

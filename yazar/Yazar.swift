@@ -26,6 +26,10 @@ final class Yazar {
             }
         }
     }
+    /// Whether the hot key is live. Starting can fail when Accessibility is
+    /// missing, so the permissions screen reads this rather than assuming a
+    /// granted permission means Yazar is listening.
+    private(set) var isListening = false
     private(set) var level = 0.0
     private(set) var recordingStartedAt: Date?
 
@@ -46,10 +50,12 @@ final class Yazar {
 
     func start() throws(HotKeyError) {
         try hotKey.start()
+        isListening = true
     }
 
     func stop() {
         hotKey.stop()
+        isListening = false
         transcriptionTask?.cancel()
         stateResetTask?.cancel()
         recorderPollingTask?.cancel()
