@@ -38,14 +38,17 @@ final class Yazar {
     private let escapeHotKey = EscapeHotKey()
     private let recorder = Recorder()
     private let soundPlayer = StatusSoundPlayer()
+    /// Set while the settings screen is recording a new trigger, so pressing keys
+    /// to choose one does not start a dictation.
+    var ignoresTrigger = false
+    private var triggerHeld = false
     private var transcriptionTask: Task<Void, Never>?
     private var stateResetTask: Task<Void, Never>?
     private var recorderPollingTask: Task<Void, Never>?
 
     init(settings: Settings) {
         self.settings = settings
-        hotKey.onPress = { [weak self] in self?.pressed() }
-        hotKey.onRelease = { [weak self] in self?.released() }
+        hotKey.onModifiersChanged = { [weak self] held in self?.modifiersChanged(held) }
         escapeHotKey.onPress = { [weak self] in self?.cancel() }
     }
 
@@ -74,6 +77,19 @@ final class Yazar {
         fail(.transcription("This is a demo error from Yazar."))
     }
 #endif
+
+    /// The trigger is whatever combination the user chose, matched exactly, so an
+    /// unrelated modifier pressed on top of it reads as a release.
+    private func modifiersChanged(_ held: Set<TriggerModifier>) {
+        let isHeld = !ignoresTrigger && settings.dictationTrigger.isHeld(held)
+        guard isHeld != triggerHeld else { return }
+        triggerHeld = isHeld
+        if isHeld {
+            pressed()
+        } else {
+            released()
+        }
+    }
 
     private func pressed() {
         switch state {

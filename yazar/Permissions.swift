@@ -17,7 +17,12 @@ final class Permissions {
     }
 
     var fnConfigured: Bool { fnUsage == 0 }
-    var readyToUse: Bool { allGranted && fnConfigured }
+
+    /// The Globe key only has to be freed up when it is the dictation key, so
+    /// readiness depends on which trigger is selected rather than on Fn always.
+    func isReady(for trigger: DictationTrigger) -> Bool {
+        allGranted && (!trigger.usesFn || fnConfigured)
+    }
 
     func refresh() {
         microphoneGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
@@ -58,14 +63,16 @@ final class Permissions {
     ///
     /// The trade is that a permission revoked while Yazar runs goes unnoticed
     /// until the next launch.
-    func startPolling() {
-        guard pollTask == nil, !readyToUse else { return }
+    /// The trigger is read once, when polling starts. Changing it needs the
+    /// settings window, and by then something is already watching readiness.
+    func startPolling(until trigger: DictationTrigger) {
+        guard pollTask == nil, !isReady(for: trigger) else { return }
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(2))
                 guard let self else { return }
                 refresh()
-                if readyToUse { break }
+                if isReady(for: trigger) { break }
             }
             self?.pollTask = nil
         }

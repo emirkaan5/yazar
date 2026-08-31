@@ -42,7 +42,11 @@ struct YazarView: View {
                     case .dictation:
                         DictationSettingsView(settings: settings, yazar: yazar)
                     case .permissions:
-                        PermissionsSettingsView(permissions: permissions, yazar: yazar)
+                        PermissionsSettingsView(
+                            permissions: permissions,
+                            settings: settings,
+                            yazar: yazar
+                        )
                     }
                 }
                 .frame(maxWidth: 620, alignment: .topLeading)

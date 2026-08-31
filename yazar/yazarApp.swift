@@ -50,11 +50,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        if permissions.readyToUse {
+        if permissions.isReady(for: settings.dictationTrigger) {
             startEngine()
         } else {
             showApp(page: .permissions)
-            permissions.startPolling()
+            permissions.startPolling(until: settings.dictationTrigger)
             startEngineWhenReady()
         }
     }
@@ -140,12 +140,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// permissions screen stays as the fallback for when the tap still fails.
     private func startEngineWhenReady() {
         withObservationTracking {
-            _ = permissions.readyToUse
+            _ = permissions.isReady(for: settings.dictationTrigger)
         } onChange: { [weak self] in
             // onChange fires before the new value lands, so re-read on the main actor.
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                if permissions.readyToUse {
+                if permissions.isReady(for: settings.dictationTrigger) {
                     startEngine()
                 } else {
                     startEngineWhenReady()

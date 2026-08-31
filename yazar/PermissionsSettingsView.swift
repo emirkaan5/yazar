@@ -3,6 +3,7 @@ import SwiftUI
 /// The grants Yazar needs, and whether it actually managed to start listening.
 struct PermissionsSettingsView: View {
     @Bindable var permissions: Permissions
+    @Bindable var settings: Settings
     let yazar: Yazar
 
     var body: some View {
@@ -19,21 +20,24 @@ struct PermissionsSettingsView: View {
 
             PermissionRow(
                 "Accessibility",
-                description: "Lets Yazar detect Fn and insert text.",
+                description: "Lets Yazar detect the dictation key and insert text.",
                 granted: permissions.accessibilityGranted,
                 actionTitle: "Request",
                 action: permissions.requestAccessibility
             )
 
-            RowDivider()
+            // Only in the way when the Globe key is the dictation key.
+            if settings.dictationTrigger.usesFn {
+                RowDivider()
 
-            PermissionRow(
-                "Globe key",
-                description: "Set “Press 🌐 key to” to “Do Nothing”.",
-                granted: permissions.fnConfigured,
-                actionTitle: "Open Settings",
-                action: permissions.openKeyboardSettings
-            )
+                PermissionRow(
+                    "Globe key",
+                    description: "Set “Press 🌐 key to” to “Do Nothing”.",
+                    granted: permissions.fnConfigured,
+                    actionTitle: "Open Settings",
+                    action: permissions.openKeyboardSettings
+                )
+            }
 
             if yazar.isListening {
                 RowDivider()
@@ -44,7 +48,7 @@ struct PermissionsSettingsView: View {
                 ) {
                     GrantedLabel("Listening")
                 }
-            } else if permissions.readyToUse {
+            } else if permissions.isReady(for: settings.dictationTrigger) {
                 RowDivider()
 
                 SettingsRow(

@@ -12,6 +12,7 @@ final class Settings {
         static let playSounds = "playSounds"
         static let soundTheme = "soundTheme"
         static let audioInputID = "audioInputID"
+        static let dictationTrigger = "dictationTrigger"
         static let restoreClipboard = "restoreClipboard"
 #if DEBUG
         static let demoMode = "demoMode"
@@ -47,6 +48,10 @@ final class Settings {
 
     var audioInputID: String {
         didSet { defaults.set(audioInputID, forKey: Key.audioInputID) }
+    }
+
+    var dictationTrigger: DictationTrigger {
+        didSet { defaults.set(dictationTrigger.rawValue, forKey: Key.dictationTrigger) }
     }
 
     var restoreClipboard: Bool {
@@ -105,6 +110,9 @@ final class Settings {
         audioInputID = defaults.string(forKey: Key.audioInputID)
             ?? AudioInput.defaultID
             ?? ""
+        dictationTrigger = defaults.string(forKey: Key.dictationTrigger)
+            .flatMap(DictationTrigger.init(rawValue:))
+            ?? .default
         restoreClipboard = defaults.object(forKey: Key.restoreClipboard) == nil
             ? true
             : defaults.bool(forKey: Key.restoreClipboard)

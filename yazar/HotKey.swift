@@ -9,14 +9,15 @@ enum HotKeyError: LocalizedError, Hashable {
     }
 }
 
-/// Watches the global modifier stream for the key held to dictate.
+/// Watches the global modifier stream and reports which modifiers are held.
+///
+/// It does not know which combination means "dictate": that depends on a
+/// setting, so the match lives with the state machine that owns one.
 final class HotKey {
-    var onPress: () -> Void = {}
-    var onRelease: () -> Void = {}
+    var onModifiersChanged: (Set<TriggerModifier>) -> Void = { _ in }
 
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
-    private var wasDown = false
 
     func start() throws(HotKeyError) {
         guard tap == nil else { return }
@@ -48,7 +49,6 @@ final class HotKey {
         }
         source = nil
         tap = nil
-        wasDown = false
     }
 
     fileprivate func reenable() {
@@ -56,14 +56,7 @@ final class HotKey {
     }
 
     fileprivate func handleFlags(_ flags: CGEventFlags) {
-        let isDown = flags.contains(.maskSecondaryFn)
-        guard isDown != wasDown else { return }
-        wasDown = isDown
-        if isDown {
-            onPress()
-        } else {
-            onRelease()
-        }
+        onModifiersChanged(TriggerModifier.held(inRawFlags: flags.rawValue))
     }
 }
 
