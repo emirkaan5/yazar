@@ -10,7 +10,8 @@ I built it because every option I found was either a heavy Electron app that did
 ## Features
 
 - Hold-to-record dictation from anywhere in macOS
-- Automatic text insertion into the active app
+- Configurable dictation key: any modifier, or a pair of them
+- Automatic text insertion into the active app, with your clipboard restored afterwards
 - On-device transcription with Apple Speech
 - Configurable OpenRouter transcription models
 - Selectable transcription language and provider
@@ -30,16 +31,18 @@ I built it because every option I found was either a heavy Electron app that did
 3. Select the `yazar` scheme and run the app.
 4. Choose Apple Speech or OpenRouter in Yazar Settings. Enter an OpenRouter API key if needed.
 5. Grant Microphone and Accessibility access when prompted.
-6. In System Settings → Keyboard, set “Press 🌐 key to” to “Do Nothing,” then relaunch Yazar.
+6. If you keep the default 🌐 Globe dictation key, open System Settings → Keyboard and set “Press 🌐 key to” to “Do Nothing.” Choosing any other key in Yazar Settings → Dictation skips this step.
 
 ## Usage
 
 Yazar runs in the menu bar.
 
-- Hold Fn/Globe to record.
+- Hold the dictation key to record. It is 🌐 Globe until you change it in Settings → Dictation, where you can pick any modifier or a pair such as ⌃⌥.
 - Release it to transcribe and paste the text.
 - Press Escape while recording or transcribing to cancel.
-- Use the menu bar icon to change the transcription provider, model, language, microphone, or sounds.
+- Use the menu bar icon to change the dictation key, transcription provider, model, language, microphone, or sounds.
+
+Yazar pastes by putting the text on the clipboard and pressing ⌘V, which is the only insertion path that works across native, web and Electron text fields. What you had copied goes back afterwards; turn that off in Settings → Dictation if you would rather keep the transcription on the clipboard.
 
 Apple Speech processes recordings on your Mac. macOS may download the selected language asset into system storage the first time you use it and manages later model updates. Yazar does not write recordings to disk.
 

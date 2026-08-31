@@ -11,7 +11,7 @@ final class Yazar {
         case transcribing
         case noSpeech
         case copied
-        case error(String)
+        case error(DictationFailure)
     }
 
     // Escape capture follows the cancellable states so every path that finishes
@@ -20,52 +20,76 @@ final class Yazar {
         didSet {
             switch state {
             case .warmingUp, .recording, .transcribing:
-                hotKey.captureEscape(true)
+                escapeHotKey.capture(true)
             case .idle, .noSpeech, .copied, .error:
-                hotKey.captureEscape(false)
+                escapeHotKey.capture(false)
             }
         }
     }
+    /// Whether the hot key is live. Starting can fail when Accessibility is
+    /// missing, so the permissions screen reads this rather than assuming a
+    /// granted permission means Yazar is listening.
+    private(set) var isListening = false
     private(set) var level = 0.0
     private(set) var recordingStartedAt: Date?
 
     private let settings: Settings
     private let hotKey = HotKey()
+    private let escapeHotKey = EscapeHotKey()
     private let recorder = Recorder()
     private let soundPlayer = StatusSoundPlayer()
+    /// Set while the settings screen is recording a new trigger, so pressing keys
+    /// to choose one does not start a dictation.
+    var ignoresTrigger = false
+    private var triggerHeld = false
     private var transcriptionTask: Task<Void, Never>?
     private var stateResetTask: Task<Void, Never>?
     private var recorderPollingTask: Task<Void, Never>?
 
     init(settings: Settings) {
         self.settings = settings
-        hotKey.onPress = { [weak self] in self?.pressed() }
-        hotKey.onRelease = { [weak self] in self?.released() }
-        hotKey.onCancel = { [weak self] in self?.cancel() }
+        hotKey.onModifiersChanged = { [weak self] held in self?.modifiersChanged(held) }
+        escapeHotKey.onPress = { [weak self] in self?.cancel() }
     }
 
-    func start() throws {
+    func start() throws(HotKeyError) {
         try hotKey.start()
+        isListening = true
     }
 
     func stop() {
         hotKey.stop()
+        escapeHotKey.stop()
+        isListening = false
         transcriptionTask?.cancel()
         stateResetTask?.cancel()
         recorderPollingTask?.cancel()
         recorder.shutDown()
     }
 
-    func show(error: Error) {
-        showError(error.localizedDescription)
+    func show(_ failure: DictationFailure) {
+        fail(failure)
     }
 
 #if DEBUG
     func triggerDemoError() {
         play(.error)
-        showError("This is a demo error from Yazar.")
+        fail(.transcription("This is a demo error from Yazar."))
     }
 #endif
+
+    /// The trigger is whatever combination the user chose, matched exactly, so an
+    /// unrelated modifier pressed on top of it reads as a release.
+    private func modifiersChanged(_ held: Set<TriggerModifier>) {
+        let isHeld = !ignoresTrigger && settings.dictationTrigger.isHeld(held)
+        guard isHeld != triggerHeld else { return }
+        triggerHeld = isHeld
+        if isHeld {
+            pressed()
+        } else {
+            released()
+        }
+    }
 
     private func pressed() {
         switch state {
@@ -85,7 +109,7 @@ final class Yazar {
             try recorder.start(inputID: settings.audioInputID)
             startPollingRecorder()
         } catch {
-            showError(error.localizedDescription)
+            fail(.recorder(error))
         }
     }
 
@@ -109,14 +133,30 @@ final class Yazar {
         }
     }
 
+    /// Drives the meter, and is also what notices a microphone that never starts
+    /// or stops part-way. Without it a device unplugged mid-hold just delivers no
+    /// samples, and the empty recording fails the speech gate — so a hardware
+    /// problem reads to the user as "No speech".
     private func startPollingRecorder() {
         recorderPollingTask?.cancel()
         recorderPollingTask = Task { [weak self] in
+            // A reused session starts in ~100 ms and the first buffer follows
+            // immediately; three seconds means it is not coming.
+            let firstBufferDeadline = ContinuousClock.now + .seconds(3)
             while !Task.isCancelled {
                 guard let self else { return }
                 let snapshot = recorder.poll()
                 level = snapshot.level
-                if snapshot.receivedFirstBuffer { receivedFirstBuffer() }
+                if snapshot.receivedFirstBuffer {
+                    receivedFirstBuffer()
+                    guard snapshot.isCapturing else {
+                        fail(.recorder(.captureInterrupted))
+                        return
+                    }
+                } else if ContinuousClock.now >= firstBufferDeadline {
+                    fail(.recorder(.microphoneUnavailable))
+                    return
+                }
                 try? await Task.sleep(for: .milliseconds(33))
             }
         }
@@ -135,15 +175,7 @@ final class Yazar {
             return
         }
 
-        let transcriber: any Transcriber = switch settings.transcriptionProvider {
-        case .appleSpeech:
-            AppleSpeechTranscriber()
-        case .openRouter:
-            OpenRouterTranscriber(
-                apiKey: settings.apiKey,
-                model: settings.openRouterModel
-            )
-        }
+        let transcriber = settings.transcriptionProvider.makeTranscriber(settings)
         let language = settings.optionalLanguage
         state = .transcribing
         transcriptionTask?.cancel()
@@ -167,7 +199,7 @@ final class Yazar {
             } catch {
                 guard !Task.isCancelled else { return }
                 self?.play(.error)
-                self?.showError(error.localizedDescription)
+                self?.fail(.transcription(error.localizedDescription))
             }
         }
     }
@@ -192,11 +224,11 @@ final class Yazar {
         }
     }
 
-    private func showError(_ message: String) {
+    private func fail(_ failure: DictationFailure) {
         recorderPollingTask?.cancel()
         recorder.cancel()
         transcriptionTask?.cancel()
-        state = .error(message)
+        state = .error(failure)
         resetState(after: .seconds(2.5))
     }
 
@@ -210,7 +242,7 @@ final class Yazar {
             showNoSpeech()
             return
         }
-        switch Inserter.insert(text) {
+        switch Inserter.insert(text, restoringClipboard: settings.restoreClipboard) {
         case .pasted:
             state = .idle
         case .copied:
@@ -218,7 +250,7 @@ final class Yazar {
             resetState(after: .seconds(1.6))
         case .clipboardUnavailable:
             play(.error)
-            showError("Couldn't put the transcription on the clipboard.")
+            fail(.clipboardUnavailable)
         }
     }
 

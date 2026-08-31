@@ -25,21 +25,23 @@ struct YazarApp: App {
 @MainActor
 @Observable
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
-    private let settings = Settings()
+    private let settings: Settings
     private let permissions = Permissions()
+    private let yazar: Yazar
     private var selectedPage = AppPage.general
-    private var yazar: Yazar?
     private var overlayPanel: OverlayPanel?
     private var appWindow: NSWindow?
 
     override init() {
+        let settings = Settings()
+        self.settings = settings
+        yazar = Yazar(settings: settings)
         super.init()
         permissions.refresh()
     }
 
     var menuBarIcon: String {
-        guard let yazar else { return "waveform" }
-        return switch yazar.state {
+        switch yazar.state {
         case .idle, .noSpeech, .copied: "waveform"
         case .warmingUp, .recording: "waveform.circle.fill"
         case .transcribing: "ellipsis.circle"
@@ -47,16 +49,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
+    /// The system requirements for the trigger selected right now. Keeping this
+    /// beside engine startup means polling only has to publish system state.
+    private var isReadyToStart: Bool {
+        permissions.allGranted &&
+            (!settings.dictationTrigger.usesFn || permissions.fnConfigured)
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
-        if permissions.readyToUse {
-            startYazar()
+        if isReadyToStart {
+            startEngine()
         } else {
             showApp(page: .permissions)
+            permissions.startPolling()
+            startEngineWhenReady()
         }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        yazar?.stop()
+        yazar.stop()
     }
 
     func showApp(page: AppPage? = nil) {
@@ -87,15 +98,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             rootView: YazarView(
                 settings: settings,
                 permissions: permissions,
+                yazar: yazar,
                 selection: Binding(
                     get: { [weak self] in self?.selectedPage ?? .general },
                     set: { [weak self] in self?.selectedPage = $0 }
-                ),
-                triggerDemoError: { [weak self] in
-#if DEBUG
-                    self?.yazar?.triggerDemoError()
-#endif
-                }
+                )
             )
         )
         hostingView.sizingOptions = [.minSize]
@@ -122,17 +129,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         ).size
     }
 
-    private func startYazar() {
-        guard yazar == nil else { return }
-        let yazar = Yazar(settings: settings)
-        let panel = OverlayPanel(yazar: yazar)
-        self.yazar = yazar
-        overlayPanel = panel
-
+    /// Builds the overlay once and claims the hot key. Safe to call again after a
+    /// failed attempt, since HotKey.start() is a no-op once the tap exists.
+    private func startEngine() {
+        permissions.stopPolling()
+        if overlayPanel == nil {
+            overlayPanel = OverlayPanel(yazar: yazar)
+        }
         do {
             try yazar.start()
         } catch {
-            yazar.show(error: error)
+            yazar.show(.hotKey(error))
+        }
+    }
+
+    /// Grants can land while Yazar is already running, so the engine starts in
+    /// place rather than making the user relaunch. The Relaunch button on the
+    /// permissions screen stays as the fallback for when the tap still fails.
+    private func startEngineWhenReady() {
+        withObservationTracking {
+            _ = isReadyToStart
+        } onChange: { [weak self] in
+            // onChange fires before the new value lands, so re-read on the main actor.
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if isReadyToStart {
+                    startEngine()
+                } else {
+                    startEngineWhenReady()
+                }
+            }
         }
     }
 }

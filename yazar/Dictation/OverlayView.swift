@@ -38,10 +38,10 @@ struct OverlayView: View {
                         Text("Copied to clipboard")
                     }
                     .foregroundStyle(.white)
-                case .error(let message):
+                case .error(let failure):
                     HStack(spacing: 6) {
                         Image(systemName: "exclamationmark.triangle.fill")
-                        Text(message)
+                        Text(failure.message)
                             .lineLimit(3)
                             .multilineTextAlignment(.leading)
                     }

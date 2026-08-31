@@ -17,7 +17,6 @@ final class Permissions {
     }
 
     var fnConfigured: Bool { fnUsage == 0 }
-    var readyToUse: Bool { allGranted && fnConfigured }
 
     func refresh() {
         microphoneGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
@@ -41,21 +40,36 @@ final class Permissions {
     }
 
     func requestAccessibility() {
-        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
+        // ApplicationServices imports kAXTrustedCheckOptionPrompt as a mutable
+        // global, which Swift 6 rejects as shared mutable state. Its value is a
+        // fixed, documented constant, so spell it out rather than reach for an
+        // unsafe opt-out.
+        let options = ["AXTrustedCheckOptionPrompt": true]
         if !AXIsProcessTrustedWithOptions(options as CFDictionary) {
             openPrivacySettings("Privacy_Accessibility")
         }
         refresh()
     }
 
+    /// Refreshes system state until the app's current readiness gate starts the
+    /// engine and stops polling. The gate owns the trigger; this object only owns
+    /// the system values it can refresh.
     func startPolling() {
-        pollTask?.cancel()
+        guard pollTask == nil else { return }
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(2))
-                self?.refresh()
+                guard !Task.isCancelled, let self else { return }
+                refresh()
             }
         }
+    }
+
+    /// A running engine no longer needs onboarding state refreshed. Permission
+    /// revocation after this point remains a next-launch concern.
+    func stopPolling() {
+        pollTask?.cancel()
+        pollTask = nil
     }
 
     func openKeyboardSettings() {

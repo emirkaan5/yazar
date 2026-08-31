@@ -23,7 +23,7 @@ enum SoundTheme: String, CaseIterable, Identifiable, Sendable {
 }
 
 /// Resolves status sounds from a theme directory and plays them without blocking the main thread.
-final class StatusSoundPlayer: @unchecked Sendable {
+nonisolated final class StatusSoundPlayer: @unchecked Sendable {
     private let bundle: Bundle
     private let queue = DispatchQueue(label: "yazar.sounds", qos: .userInitiated)
     private var sounds: [String: NSSound] = [:]
