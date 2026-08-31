@@ -224,7 +224,7 @@ final class Yazar {
             showNoSpeech()
             return
         }
-        switch Inserter.insert(text) {
+        switch Inserter.insert(text, restoringClipboard: settings.restoreClipboard) {
         case .pasted:
             state = .idle
         case .copied:

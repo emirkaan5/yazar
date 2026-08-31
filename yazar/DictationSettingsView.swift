@@ -29,6 +29,17 @@ struct DictationSettingsView: View {
             RowDivider()
 
             SettingsRow(
+                "Restore clipboard",
+                description: "Put back what you had copied after pasting a transcription."
+            ) {
+                Toggle("Restore clipboard", isOn: $settings.restoreClipboard)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+            }
+
+            RowDivider()
+
+            SettingsRow(
                 "Play sounds",
                 description: "Play feedback for recording and transcription status."
             ) {

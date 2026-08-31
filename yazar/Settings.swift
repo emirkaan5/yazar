@@ -12,6 +12,7 @@ final class Settings {
         static let playSounds = "playSounds"
         static let soundTheme = "soundTheme"
         static let audioInputID = "audioInputID"
+        static let restoreClipboard = "restoreClipboard"
 #if DEBUG
         static let demoMode = "demoMode"
 #endif
@@ -46,6 +47,10 @@ final class Settings {
 
     var audioInputID: String {
         didSet { defaults.set(audioInputID, forKey: Key.audioInputID) }
+    }
+
+    var restoreClipboard: Bool {
+        didSet { defaults.set(restoreClipboard, forKey: Key.restoreClipboard) }
     }
 
 #if DEBUG
@@ -100,6 +105,9 @@ final class Settings {
         audioInputID = defaults.string(forKey: Key.audioInputID)
             ?? AudioInput.defaultID
             ?? ""
+        restoreClipboard = defaults.object(forKey: Key.restoreClipboard) == nil
+            ? true
+            : defaults.bool(forKey: Key.restoreClipboard)
 #if DEBUG
         demoMode = defaults.bool(forKey: Key.demoMode)
 #endif
