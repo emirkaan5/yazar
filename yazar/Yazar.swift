@@ -20,9 +20,9 @@ final class Yazar {
         didSet {
             switch state {
             case .warmingUp, .recording, .transcribing:
-                hotKey.captureEscape(true)
+                escapeHotKey.capture(true)
             case .idle, .noSpeech, .copied, .error:
-                hotKey.captureEscape(false)
+                escapeHotKey.capture(false)
             }
         }
     }
@@ -35,6 +35,7 @@ final class Yazar {
 
     private let settings: Settings
     private let hotKey = HotKey()
+    private let escapeHotKey = EscapeHotKey()
     private let recorder = Recorder()
     private let soundPlayer = StatusSoundPlayer()
     private var transcriptionTask: Task<Void, Never>?
@@ -45,7 +46,7 @@ final class Yazar {
         self.settings = settings
         hotKey.onPress = { [weak self] in self?.pressed() }
         hotKey.onRelease = { [weak self] in self?.released() }
-        hotKey.onCancel = { [weak self] in self?.cancel() }
+        escapeHotKey.onPress = { [weak self] in self?.cancel() }
     }
 
     func start() throws(HotKeyError) {
@@ -55,6 +56,7 @@ final class Yazar {
 
     func stop() {
         hotKey.stop()
+        escapeHotKey.stop()
         isListening = false
         transcriptionTask?.cancel()
         stateResetTask?.cancel()
