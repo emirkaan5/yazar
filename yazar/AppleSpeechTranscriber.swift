@@ -2,7 +2,7 @@ import AVFoundation
 import Foundation
 import Speech
 
-struct AppleSpeechTranscriber: Transcriber {
+nonisolated struct AppleSpeechTranscriber: Transcriber {
     func transcribe(_ recording: Recording, language: String?) async throws -> String {
         guard !recording.pcm16.isEmpty else { return "" }
         guard SpeechTranscriber.isAvailable else {
@@ -97,7 +97,10 @@ struct AppleSpeechTranscriber: Transcriber {
             throw AppleSpeechTranscriberError.invalidAudio
         }
 
-        var suppliedInput = false
+        // AVAudioConverterInputBlock is marked @Sendable, but the converter runs
+        // it synchronously before `convert` returns, so nothing crosses a boundary.
+        nonisolated(unsafe) let source = source
+        nonisolated(unsafe) var suppliedInput = false
         var conversionError: NSError?
         let status = converter.convert(to: output, error: &conversionError) { _, inputStatus in
             if suppliedInput {
@@ -128,7 +131,7 @@ struct AppleSpeechTranscriber: Transcriber {
 
 // Locale resolution and asset installation are shared with the settings screen,
 // which reports the same model this transcriber will use.
-extension AppleSpeechTranscriber {
+nonisolated extension AppleSpeechTranscriber {
     /// The locale Apple Speech transcribes `language` with, or nil when it
     /// can't. `SpeechTranscriber.supportedLocale(equivalentTo:)` normalizes any
     /// input it recognizes as a language — "tr" comes back as tr_TR even though

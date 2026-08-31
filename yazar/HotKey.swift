@@ -127,7 +127,7 @@ final class HotKey {
     }
 }
 
-private func hotKeyCallback(
+private nonisolated func hotKeyCallback(
     proxy: CGEventTapProxy,
     type: CGEventType,
     event: CGEvent,
@@ -147,7 +147,7 @@ private func hotKeyCallback(
 
 
 // Carbon delivers hot key events on the main thread, so the cancel runs inline.
-private func escapeHotKeyCallback(
+private nonisolated func escapeHotKeyCallback(
     handler: EventHandlerCallRef?,
     event: EventRef?,
     userInfo: UnsafeMutableRawPointer?

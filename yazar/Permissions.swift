@@ -41,7 +41,11 @@ final class Permissions {
     }
 
     func requestAccessibility() {
-        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
+        // ApplicationServices imports kAXTrustedCheckOptionPrompt as a mutable
+        // global, which Swift 6 rejects as shared mutable state. Its value is a
+        // fixed, documented constant, so spell it out rather than reach for an
+        // unsafe opt-out.
+        let options = ["AXTrustedCheckOptionPrompt": true]
         if !AXIsProcessTrustedWithOptions(options as CFDictionary) {
             openPrivacySettings("Privacy_Accessibility")
         }

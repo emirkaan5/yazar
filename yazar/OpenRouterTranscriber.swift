@@ -1,6 +1,6 @@
 import Foundation
 
-struct OpenRouterTranscriber: Transcriber {
+nonisolated struct OpenRouterTranscriber: Transcriber {
     let apiKey: String
     let model: String
 
