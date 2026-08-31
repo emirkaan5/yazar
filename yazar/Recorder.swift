@@ -2,7 +2,7 @@ import AVFoundation
 import Foundation
 import Synchronization
 
-enum RecorderError: LocalizedError {
+enum RecorderError: LocalizedError, Hashable {
     case microphoneUnavailable
     case captureSetupFailed
 
@@ -44,14 +44,14 @@ final class Recorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
     private var session: AVCaptureSession?
     private var sessionInputID: String?
 
-    func start(inputID: String) throws {
+    func start(inputID: String) throws(RecorderError) {
         recording.store(false, ordering: .sequentiallyConsistent)
         captureQueue.sync { sink.reset() }
         receivedFirstBuffer.store(false, ordering: .relaxed)
         level.store(0, ordering: .relaxed)
 
         if sessionInputID != inputID { discardSession() }
-        let session = try self.session ?? setUpSession(inputID: inputID)
+        let session = if let session { session } else { try setUpSession(inputID: inputID) }
         self.session = session
         sessionInputID = inputID
         recording.store(true, ordering: .sequentiallyConsistent)
@@ -99,7 +99,7 @@ final class Recorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
 
     /// Built once and reused. The microphone indicator only lights while the session runs,
     /// so start/stop bracket each recording rather than the app's lifetime.
-    private func setUpSession(inputID: String) throws -> AVCaptureSession {
+    private func setUpSession(inputID: String) throws(RecorderError) -> AVCaptureSession {
         let device = inputID.isEmpty ? AudioInput.defaultDevice : AudioInput.device(id: inputID)
         guard let device,
               let input = try? AVCaptureDeviceInput(device: device) else {

@@ -2,7 +2,7 @@ import Carbon.HIToolbox
 import CoreGraphics
 import Foundation
 
-enum HotKeyError: LocalizedError {
+enum HotKeyError: LocalizedError, Hashable {
     case eventTapUnavailable
 
     var errorDescription: String? {
@@ -21,7 +21,7 @@ final class HotKey {
     private var escapeHotKey: EventHotKeyRef?
     private var escapeHandler: EventHandlerRef?
 
-    func start() throws {
+    func start() throws(HotKeyError) {
         guard tap == nil else { return }
         let eventMask = CGEventMask(1) << CGEventType.flagsChanged.rawValue
         guard let tap = CGEvent.tapCreate(

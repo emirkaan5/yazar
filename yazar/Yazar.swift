@@ -11,7 +11,7 @@ final class Yazar {
         case transcribing
         case noSpeech
         case copied
-        case error(String)
+        case error(DictationFailure)
     }
 
     // Escape capture follows the cancellable states so every path that finishes
@@ -44,7 +44,7 @@ final class Yazar {
         hotKey.onCancel = { [weak self] in self?.cancel() }
     }
 
-    func start() throws {
+    func start() throws(HotKeyError) {
         try hotKey.start()
     }
 
@@ -56,14 +56,14 @@ final class Yazar {
         recorder.shutDown()
     }
 
-    func show(error: Error) {
-        showError(error.localizedDescription)
+    func show(_ failure: DictationFailure) {
+        fail(failure)
     }
 
 #if DEBUG
     func triggerDemoError() {
         play(.error)
-        showError("This is a demo error from Yazar.")
+        fail(.transcription("This is a demo error from Yazar."))
     }
 #endif
 
@@ -85,7 +85,7 @@ final class Yazar {
             try recorder.start(inputID: settings.audioInputID)
             startPollingRecorder()
         } catch {
-            showError(error.localizedDescription)
+            fail(.recorder(error))
         }
     }
 
@@ -167,7 +167,7 @@ final class Yazar {
             } catch {
                 guard !Task.isCancelled else { return }
                 self?.play(.error)
-                self?.showError(error.localizedDescription)
+                self?.fail(.transcription(error.localizedDescription))
             }
         }
     }
@@ -192,11 +192,11 @@ final class Yazar {
         }
     }
 
-    private func showError(_ message: String) {
+    private func fail(_ failure: DictationFailure) {
         recorderPollingTask?.cancel()
         recorder.cancel()
         transcriptionTask?.cancel()
-        state = .error(message)
+        state = .error(failure)
         resetState(after: .seconds(2.5))
     }
 
@@ -218,7 +218,7 @@ final class Yazar {
             resetState(after: .seconds(1.6))
         case .clipboardUnavailable:
             play(.error)
-            showError("Couldn't put the transcription on the clipboard.")
+            fail(.clipboardUnavailable)
         }
     }
 

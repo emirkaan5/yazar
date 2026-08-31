@@ -132,7 +132,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         do {
             try yazar.start()
         } catch {
-            yazar.show(error: error)
+            yazar.show(.hotKey(error))
         }
     }
 }
