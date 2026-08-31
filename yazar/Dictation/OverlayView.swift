@@ -7,6 +7,11 @@ struct OverlayView: View {
     @State private var visible = false
 
     static let panelSize = CGSize(width: 420, height: 80)
+    static let capsuleAnimationDuration: TimeInterval = 0.3
+    private static let capsuleAnimation = Animation.spring(
+        duration: capsuleAnimationDuration,
+        bounce: 0.25
+    )
 
     var body: some View {
         ZStack {
@@ -58,22 +63,22 @@ struct OverlayView: View {
         // even when the system is in light mode.
         .environment(\.colorScheme, .dark)
         .padding(.horizontal, 12)
-        // Entrance: the capsule extends vertically from a sliver to full height,
+        // Entrance: the capsule extends horizontally from a sliver to full width,
         // clipping (not squashing) the content while it grows.
         .frame(width: capsuleSize.width, height: capsuleSize.height)
+        .frame(width: capsuleWidth)
         .background(backgroundColor, in: Capsule())
-        .frame(height: visible ? capsuleSize.height : 5)
-        .clipShape(Capsule())
-        .animation(.spring(duration: 0.4, bounce: 0.4), value: capsuleSize)
-        .blur(radius: visible ? 0 : 10)
         .opacity(visible ? 1 : 0)
-        // Pins the capsule to the centre of the panel so the height change
-        // expands symmetrically instead of dropping from the top edge.
+        .clipShape(Capsule())
+        // .blur(radius: visible ? 0 : 10)
+        .animation(Self.capsuleAnimation, value: capsuleWidth)
+        // Pins the capsule to the centre of the panel so the width change
+        // expands symmetrically instead of growing from the leading edge.
         .frame(width: Self.panelSize.width, height: Self.panelSize.height, alignment: .center)
         .onChange(of: yazar.state == .idle) { _, idle in
             // Animate both ways so an interrupted entrance reverses smoothly
-            // rather than snapping while the panel fades out.
-            withAnimation(.easeOut(duration: 0.2)) { visible = !idle }
+            // rather than snapping closed.
+            visible = !idle
         }
     }
 
@@ -110,6 +115,10 @@ struct OverlayView: View {
         case .copied: CGSize(width: 200, height: 35)
         default: CGSize(width: 115, height: 35)
         }
+    }
+
+    private var capsuleWidth: CGFloat {
+        visible ? capsuleSize.width : 5
     }
 
     private func elapsed(at date: Date) -> Double {
