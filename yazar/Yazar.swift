@@ -157,15 +157,7 @@ final class Yazar {
             return
         }
 
-        let transcriber: any Transcriber = switch settings.transcriptionProvider {
-        case .appleSpeech:
-            AppleSpeechTranscriber()
-        case .openRouter:
-            OpenRouterTranscriber(
-                apiKey: settings.apiKey,
-                model: settings.openRouterModel
-            )
-        }
+        let transcriber = settings.transcriptionProvider.makeTranscriber(settings)
         let language = settings.optionalLanguage
         state = .transcribing
         transcriptionTask?.cancel()

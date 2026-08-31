@@ -141,7 +141,7 @@ struct YazarView: View {
 
     private var generalSettings: some View {
         settingsSection("Transcription") {
-            settingsRow("Provider", description: providerDescription) {
+            settingsRow("Provider", description: settings.transcriptionProvider.summary) {
                 Picker("Provider", selection: $settings.transcriptionProvider) {
                     ForEach(TranscriptionProvider.allCases) { provider in
                         Text(provider.displayName).tag(provider)
@@ -204,9 +204,9 @@ struct YazarView: View {
 
             settingsRow(
                 "Language",
-                description: languageDescription
+                description: settings.transcriptionProvider.languageHint
             ) {
-                TextField(languagePlaceholder, text: $settings.language)
+                TextField(settings.transcriptionProvider.languagePlaceholder, text: $settings.language)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 220)
             }
@@ -270,29 +270,6 @@ struct YazarView: View {
             Label("Downloaded", systemImage: "checkmark.circle.fill")
                 .font(.system(size: 12))
                 .foregroundStyle(.green)
-        }
-    }
-
-    private var providerDescription: String {
-        switch settings.transcriptionProvider {
-        case .appleSpeech:
-            "Processes audio on this Mac. macOS may fetch a language asset on first use."
-        case .openRouter:
-            "Sends each recording to OpenRouter for transcription."
-        }
-    }
-
-    private var languageDescription: String {
-        switch settings.transcriptionProvider {
-        case .appleSpeech: "Leave blank to use your Mac's current language."
-        case .openRouter: "Leave blank to detect the spoken language."
-        }
-    }
-
-    private var languagePlaceholder: String {
-        switch settings.transcriptionProvider {
-        case .appleSpeech: "System language"
-        case .openRouter: "Auto-detect"
         }
     }
 

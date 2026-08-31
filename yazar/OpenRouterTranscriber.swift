@@ -35,7 +35,7 @@ nonisolated struct OpenRouterTranscriber: Transcriber {
         request.httpBody = try JSONEncoder().encode(RequestBody(
             model: model,
             inputAudio: .init(data: wav.base64EncodedString(), format: "wav"),
-            language: language
+            language: Self.isoCode(for: language)
         ))
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -53,6 +53,15 @@ nonisolated struct OpenRouterTranscriber: Transcriber {
 
         let responseBody = try JSONDecoder().decode(ResponseBody.self, from: data)
         return responseBody.text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Whisper-style endpoints expect a bare ISO-639-1 code, but the language
+    /// setting is shared with Apple Speech, which wants BCP-47. Sending the
+    /// primary subtag means a value like "en-US" still selects English instead of
+    /// being silently ignored.
+    private static func isoCode(for language: String?) -> String? {
+        guard let language else { return nil }
+        return Locale(identifier: language).language.languageCode?.identifier ?? language
     }
 
     private struct RequestBody: Encodable {
