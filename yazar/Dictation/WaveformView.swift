@@ -1,14 +1,20 @@
 import SwiftUI
 
-// The recording level meter. `TimelineView(.animation)` re-runs this at the
-// display refresh rate, so the bars are one `Shape` rather than seven
-// `Capsule` views: each frame builds a single path instead of laying out and
-// diffing seven nodes with dynamic frames.
+// The recording level meter. It reads `yazar.level` itself instead of taking the
+// value as a parameter: the level is rewritten every 33 ms, and reading it in
+// `OverlayView` would invalidate the whole capsule — background, sizing, capsule
+// width animation — 30 times a second. Read inside the `TimelineView` closure it
+// costs nothing extra, because `.animation` already re-runs that closure every
+// frame.
+//
+// The bars are one `Shape` rather than seven `Capsule` views: each frame builds a
+// single path instead of laying out and diffing seven nodes with dynamic frames.
 struct WaveformView: View {
-    let level: Double
+    let yazar: Yazar
 
     var body: some View {
         TimelineView(.animation) { context in
+            let level = yazar.level
             WaveformShape(level: level, time: context.date.timeIntervalSinceReferenceDate)
                 .fill(.white)
                 // The wave itself is redrawn every frame; only the level jumps

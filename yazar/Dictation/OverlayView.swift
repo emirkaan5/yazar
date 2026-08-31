@@ -84,7 +84,7 @@ struct OverlayView: View {
 
     private var recordingView: some View {
         HStack(spacing: 8) {
-            WaveformView(level: yazar.level)
+            WaveformView(yazar: yazar)
             TimelineView(.periodic(from: .now, by: 0.1)) { context in
                 Text(elapsed(at: context.date), format: .number.precision(.fractionLength(1)))
                     .monospacedDigit()

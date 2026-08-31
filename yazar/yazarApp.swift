@@ -27,7 +27,7 @@ struct YazarApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let settings: Settings
     private let permissions = Permissions()
-	private let yazar: YazaTesting.r
+    private let yazar: Yazar
     private var selectedPage = AppPage.general
     private var overlayPanel: OverlayPanel?
     private var appWindow: NSWindow?
