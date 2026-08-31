@@ -151,14 +151,14 @@ struct YazarView: View {
                 .frame(width: 220, alignment: .trailing)
             }
 
-            if settings.transcriptionProvider == .openRouter {
+            if settings.transcriptionProvider.needsAPIKey {
                 rowDivider
 
                 settingsRow(
                     "API key",
                     description: "Stored securely in your Mac's Keychain."
                 ) {
-                    SecureField("Required", text: $settings.apiKey)
+                    SecureField("Required", text: $settings.selectedAPIKey)
                         .textFieldStyle(.roundedBorder)
                         .textContentType(.password)
                         .frame(width: 220)
@@ -172,7 +172,9 @@ struct YazarView: View {
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
                 }
+            }
 
+            if settings.transcriptionProvider == .openRouter {
                 rowDivider
 
                 settingsRow(

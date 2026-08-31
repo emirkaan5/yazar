@@ -29,6 +29,14 @@ enum TranscriptionProvider: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    /// Whether this provider needs a credential in the Keychain.
+    var needsAPIKey: Bool {
+        switch self {
+        case .appleSpeech: false
+        case .openRouter: true
+        }
+    }
+
     var languagePlaceholder: String {
         switch self {
         case .appleSpeech: "System language"
@@ -45,7 +53,7 @@ enum TranscriptionProvider: String, CaseIterable, Identifiable, Sendable {
             AppleSpeechTranscriber()
         case .openRouter:
             OpenRouterTranscriber(
-                apiKey: settings.apiKey,
+                apiKey: settings.apiKey(for: self),
                 model: settings.openRouterModel
             )
         }

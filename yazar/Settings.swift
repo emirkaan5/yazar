@@ -54,19 +54,30 @@ final class Settings {
     }
 #endif
 
-    var apiKey: String {
-        didSet {
-            guard apiKey != oldValue else { return }
-            do {
-                try Keychain.save(apiKey)
-                apiKeyError = nil
-            } catch {
-                apiKeyError = error.localizedDescription
-            }
-        }
+    private(set) var apiKeys: [TranscriptionProvider: String] = [:]
+    private(set) var apiKeyError: String?
+
+    /// The credential for whichever provider is selected, so the settings screen
+    /// can bind straight to it and follow along when the provider changes.
+    var selectedAPIKey: String {
+        get { apiKey(for: transcriptionProvider) }
+        set { setAPIKey(newValue, for: transcriptionProvider) }
     }
 
-    private(set) var apiKeyError: String?
+    func apiKey(for provider: TranscriptionProvider) -> String {
+        apiKeys[provider] ?? ""
+    }
+
+    private func setAPIKey(_ key: String, for provider: TranscriptionProvider) {
+        guard apiKey(for: provider) != key else { return }
+        apiKeys[provider] = key
+        do {
+            try Keychain.save(key, for: provider)
+            apiKeyError = nil
+        } catch {
+            apiKeyError = error.localizedDescription
+        }
+    }
 
     var optionalLanguage: String? {
         let trimmed = language.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -93,52 +104,74 @@ final class Settings {
         demoMode = defaults.bool(forKey: Key.demoMode)
 #endif
         do {
-            apiKey = try Keychain.load()
+            try Keychain.migrateLegacyKey()
+            for provider in TranscriptionProvider.allCases where provider.needsAPIKey {
+                apiKeys[provider] = try Keychain.load(for: provider)
+            }
             apiKeyError = nil
         } catch {
-            apiKey = ""
             apiKeyError = error.localizedDescription
         }
     }
 }
 
+/// One Keychain item per provider that needs a credential.
+///
+/// Yazar first shipped a single slot — service "ai.yazar.openrouter", account
+/// "api-key" — which could only ever hold one provider's key. migrateLegacyKey
+/// moves that item into the per-provider layout and deletes it, so the old shape
+/// is described in exactly one place and disappears after the first launch.
 private enum Keychain {
-    static let service = "ai.yazar.openrouter"
-    static let account = "api-key"
+    static let service = "ai.yazar.credentials"
+    private static let legacyService = "ai.yazar.openrouter"
+    private static let legacyAccount = "api-key"
 
-    static func load() throws -> String {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
-        var result: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        if status == errSecItemNotFound { return "" }
-        guard status == errSecSuccess, let data = result as? Data else {
-            throw KeychainError(status: status)
-        }
+    static func load(for provider: TranscriptionProvider) throws -> String {
+        guard let data = try read(service: service, account: provider.rawValue) else { return "" }
         return String(decoding: data, as: UTF8.self)
     }
 
-    static func save(_ value: String) throws {
-        let identity: [String: Any] = [
+    static func save(_ value: String, for provider: TranscriptionProvider) throws {
+        if value.isEmpty {
+            try delete(service: service, account: provider.rawValue)
+        } else {
+            try write(Data(value.utf8), service: service, account: provider.rawValue)
+        }
+    }
+
+    static func migrateLegacyKey() throws {
+        guard let legacy = try read(service: legacyService, account: legacyAccount) else { return }
+        let account = TranscriptionProvider.openRouter.rawValue
+        // A key already stored in the new layout wins; the old item is stale.
+        if try read(service: service, account: account) == nil {
+            try write(legacy, service: service, account: account)
+        }
+        try delete(service: legacyService, account: legacyAccount)
+    }
+
+    private static func identity(service: String, account: String) -> [String: Any] {
+        [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
         ]
+    }
 
-        if value.isEmpty {
-            let status = SecItemDelete(identity as CFDictionary)
-            guard status == errSecSuccess || status == errSecItemNotFound else {
-                throw KeychainError(status: status)
-            }
-            return
+    private static func read(service: String, account: String) throws -> Data? {
+        var query = identity(service: service, account: account)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound { return nil }
+        guard status == errSecSuccess, let data = result as? Data else {
+            throw KeychainError(status: status)
         }
+        return data
+    }
 
-        let data = Data(value.utf8)
+    private static func write(_ data: Data, service: String, account: String) throws {
+        let identity = identity(service: service, account: account)
         let updateStatus = SecItemUpdate(
             identity as CFDictionary,
             [kSecValueData as String: data] as CFDictionary
@@ -153,6 +186,13 @@ private enum Keychain {
         let addStatus = SecItemAdd(item as CFDictionary, nil)
         guard addStatus == errSecSuccess else {
             throw KeychainError(status: addStatus)
+        }
+    }
+
+    private static func delete(service: String, account: String) throws {
+        let status = SecItemDelete(identity(service: service, account: account) as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw KeychainError(status: status)
         }
     }
 }
