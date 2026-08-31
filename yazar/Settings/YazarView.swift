@@ -1,5 +1,29 @@
 import SwiftUI
 
+enum AppPage: CaseIterable, Identifiable {
+    case general
+    case dictation
+    case permissions
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .general: "General"
+        case .dictation: "Dictation"
+        case .permissions: "Permissions"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .general: "gearshape"
+        case .dictation: "waveform"
+        case .permissions: "lock.shield"
+        }
+    }
+}
+
 /// The settings window: a page list on the left, the selected page on the right.
 struct YazarView: View {
     static let minimumSize = CGSize(width: 680, height: 420)
