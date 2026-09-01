@@ -6,7 +6,7 @@ Yazar is a native macOS utility app for speech to text. Swift source lives in `y
 
 - Assets belong in `yazar/Assets.xcassets`, status sounds in `yazar/Resources/SFX`, and signing capabilities in `yazar/yazar.entitlements`. Keep project settings and target membership in `yazar.xcodeproj`. 
 - Maintenance utilities live in `scripts/` and `tools/`.
-- `docs/roadmap.md` Contains future possible features which might be implemented. The point of this document is for you to take these into consideration before an architectural change, so your changes can accommodate the possible future state of the app better.
+- `docs/roadmap.md` Contains future possible features which might be implemented. The point of this document is for you to take these into consideration before an architectural change, so your changes can accommodate the possible future architecture of the app better.
 - `docs/plans` This is where your impelmentation plans should be written to.
 
 ## Build, Test, and Development Commands
@@ -27,7 +27,7 @@ Follow the existing Swift style: four-space indentation, one primary type per fi
 
 ## Testing Guidelines
 
-The project currently has no test target. If you add a test target, place tests under `yazarTests/`, name files `TypeNameTests.swift`, and test behavior rather than implementation details.
+Tests live in the `yazarTests` target under `yazarTests/`, written with Swift Testing. Name files `TypeNameTests.swift` and test behavior rather than implementation details. `xcodebuild -project yazar.xcodeproj -scheme yazar -configuration Debug test` runs them.
 
 ## Commit & Pull Request Guidelines
 
