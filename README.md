@@ -11,7 +11,7 @@ I built it because the options I found were heavy Electron apps, paid, or both. 
 
 - Hold-to-record dictation from anywhere in macOS
 - Configurable dictation key: any modifier, or a pair of them
-- Automatic text insertion into the active app, with your clipboard restored afterwards
+- Automatic text insertion into the active app, with every transcription kept on the clipboard
 - On-device transcription with Apple Speech
 - Configurable OpenRouter transcription models
 - Selectable transcription language and provider
@@ -42,7 +42,7 @@ Yazar runs in the menu bar.
 - Press Escape while recording or transcribing to cancel.
 - Use the menu bar icon to change the dictation key, transcription provider, model, language, microphone, or sounds.
 
-Yazar pastes by putting the text on the clipboard and pressing ⌘V, which is the only insertion path that works across native, web and Electron text fields. What you had copied goes back afterwards; turn that off in Settings → Dictation if you would rather keep the transcription on the clipboard.
+Yazar puts every transcription on the clipboard and presses ⌘V, which is the only insertion path that works across native, web and Electron text fields. If the active app does not accept the synthetic shortcut, the transcription remains available for you to paste manually.
 
 Apple Speech processes recordings on your Mac. macOS may download the selected language asset into system storage the first time you use it and manages later model updates. Yazar does not write recordings to disk.
 

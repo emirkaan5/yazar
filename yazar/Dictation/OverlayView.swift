@@ -37,12 +37,6 @@ struct OverlayView: View {
                         Text("No speech")
                     }
                     .foregroundStyle(.white)
-                case .copied:
-                    HStack(spacing: 6) {
-                        Image(systemName: "doc.on.clipboard")
-                        Text("Copied to clipboard")
-                    }
-                    .foregroundStyle(.white)
                 case .error(let failure):
                     HStack(spacing: 6) {
                         Image(systemName: "exclamationmark.triangle.fill")
@@ -101,7 +95,7 @@ struct OverlayView: View {
     private var capsuleSize: CGSize {
         switch yazar.state {
         case .error: CGSize(width: 350, height: 35)
-        case .copied: CGSize(width: 200, height: 35)
+        case .noSpeech: CGSize(width: 135, height: 35)
         default: CGSize(width: 115, height: 35)
         }
     }

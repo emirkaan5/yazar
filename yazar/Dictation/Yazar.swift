@@ -10,7 +10,6 @@ final class Yazar {
         case recording
         case transcribing
         case noSpeech
-        case copied
         case error(DictationFailure)
     }
 
@@ -21,7 +20,7 @@ final class Yazar {
             switch state {
             case .warmingUp, .recording, .transcribing:
                 escapeHotKey.capture(true)
-            case .idle, .noSpeech, .copied, .error:
+            case .idle, .noSpeech, .error:
                 escapeHotKey.capture(false)
             }
         }
@@ -95,7 +94,7 @@ final class Yazar {
         switch state {
         case .idle:
             break
-        case .noSpeech, .copied, .error:
+        case .noSpeech, .error:
             stateResetTask?.cancel()
         case .warmingUp, .recording, .transcribing:
             return
@@ -117,7 +116,7 @@ final class Yazar {
         switch state {
         case .warmingUp, .recording:
             break
-        case .idle, .transcribing, .noSpeech, .copied, .error:
+        case .idle, .transcribing, .noSpeech, .error:
             return
         }
 
@@ -219,7 +218,7 @@ final class Yazar {
             transcriptionTask = nil
             play(.cancel)
             state = .idle
-        case .idle, .noSpeech, .copied, .error:
+        case .idle, .noSpeech, .error:
             return
         }
     }
@@ -232,22 +231,17 @@ final class Yazar {
         resetState(after: .seconds(2.5))
     }
 
-    /// Attempt to paste into the focused application when event-posting permission
-    /// allows it. When the target cannot be identified as editable, keep the
-    /// transcription on the clipboard and say so even though the shortcut was
-    /// attempted. A provider that recognized nothing lands in the same place as
-    /// audio that never cleared the speech gate.
+    /// Keep every transcription on the clipboard and attempt to paste it into the
+    /// focused application. A provider that recognized nothing lands in the same
+    /// place as audio that never cleared the speech gate.
     private func deliver(_ text: String) {
         guard !text.isEmpty else {
             showNoSpeech()
             return
         }
-        switch Inserter.insert(text, restoringClipboard: settings.restoreClipboard) {
-        case .pasteAttempted:
+        switch Inserter.insert(text) {
+        case .delivered:
             state = .idle
-        case .copied:
-            state = .copied
-            resetState(after: .seconds(1.6))
         case .clipboardUnavailable:
             play(.error)
             fail(.clipboardUnavailable)
