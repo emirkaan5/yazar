@@ -37,6 +37,7 @@ final class Yazar {
     private let escapeHotKey = EscapeHotKey()
     private let recorder = Recorder()
     private let soundPlayer = StatusSoundPlayer()
+    private let textContextCapture = TextContextCapture()
     /// Set while the settings screen is recording a new trigger, so pressing keys
     /// to choose one does not start a dictation.
     var ignoresTrigger = false
@@ -63,6 +64,7 @@ final class Yazar {
         transcriptionTask?.cancel()
         stateResetTask?.cancel()
         recorderPollingTask?.cancel()
+        textContextCapture.cancel()
         recorder.shutDown()
     }
 
@@ -104,6 +106,7 @@ final class Yazar {
         level = 0
         state = .warmingUp
         play(.start)
+        textContextCapture.begin()
         do {
             try recorder.start(inputID: settings.audioInputID)
             startPollingRecorder()
@@ -164,6 +167,7 @@ final class Yazar {
     private func finishRecording() {
         recorderPollingTask?.cancel()
         let recording = recorder.stop()
+        let insertionContext = textContextCapture.finish()
         let demoMode = isDemoMode
         play(.stop)
         recordingStartedAt = nil
@@ -192,7 +196,7 @@ final class Yazar {
                 text = try await transcriber.transcribe(recording, language: language)
 #endif
                 try Task.checkCancellation()
-                self?.deliver(text)
+                self?.deliver(text, context: insertionContext)
             } catch is CancellationError {
                 return
             } catch {
@@ -206,6 +210,7 @@ final class Yazar {
     /// Escape drops whatever is in flight. Only reachable while a dictation is
     /// running, since that is the only time the hot key is registered.
     private func cancel() {
+        textContextCapture.cancel()
         switch state {
         case .warmingUp, .recording:
             recorderPollingTask?.cancel()
@@ -224,6 +229,7 @@ final class Yazar {
     }
 
     private func fail(_ failure: DictationFailure) {
+        textContextCapture.cancel()
         recorderPollingTask?.cancel()
         recorder.cancel()
         transcriptionTask?.cancel()
@@ -234,12 +240,20 @@ final class Yazar {
     /// Keep every transcription on the clipboard and attempt to paste it into the
     /// focused application. A provider that recognized nothing lands in the same
     /// place as audio that never cleared the speech gate.
-    private func deliver(_ text: String) {
+    private func deliver(_ text: String, context: TextInsertionContext?) {
         guard !text.isEmpty else {
             showNoSpeech()
             return
         }
-        switch Inserter.insert(text) {
+        let textToPaste = context.map {
+            TranscriptFitter.fit(
+                text,
+                to: $0,
+                startsWithProperNoun: false,
+                properNouns: []
+            )
+        } ?? text
+        switch Inserter.insert(textToPaste) {
         case .delivered:
             state = .idle
         case .clipboardUnavailable:

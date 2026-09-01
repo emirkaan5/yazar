@@ -8,6 +8,7 @@
 
 /* Begin PBXFileReference section */
 		14A0E8D9304355EF009CC89B /* yazar.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = yazar.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		14A0E8F030500000009CC89B /* yazarTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = yazarTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -19,10 +20,22 @@
 			path = yazar;
 			sourceTree = "<group>";
 		};
+		14A0E8F130500000009CC89B /* yazarTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = yazarTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		14A0E8D6304355EF009CC89B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		14A0E8F230500000009CC89B /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -36,6 +49,7 @@
 			isa = PBXGroup;
 			children = (
 				14A0E8DB304355EF009CC89B /* yazar */,
+				14A0E8F130500000009CC89B /* yazarTests */,
 				14A0E8DA304355EF009CC89B /* Products */,
 			);
 			sourceTree = "<group>";
@@ -44,6 +58,7 @@
 			isa = PBXGroup;
 			children = (
 				14A0E8D9304355EF009CC89B /* yazar.app */,
+				14A0E8F030500000009CC89B /* yazarTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -73,7 +88,40 @@
 			productReference = 14A0E8D9304355EF009CC89B /* yazar.app */;
 			productType = "com.apple.product-type.application";
 		};
+		14A0E8F530500000009CC89B /* yazarTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 14A0E8FA30500000009CC89B /* Build configuration list for PBXNativeTarget "yazarTests" */;
+			buildPhases = (
+				14A0E8F430500000009CC89B /* Sources */,
+				14A0E8F230500000009CC89B /* Frameworks */,
+				14A0E8F330500000009CC89B /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				14A0E8F730500000009CC89B /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				14A0E8F130500000009CC89B /* yazarTests */,
+			);
+			name = yazarTests;
+			packageProductDependencies = (
+			);
+			productName = yazarTests;
+			productReference = 14A0E8F030500000009CC89B /* yazarTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
+
+/* Begin PBXContainerItemProxy section */
+		14A0E8F630500000009CC89B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 14A0E8D1304355EF009CC89B /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 14A0E8D8304355EF009CC89B;
+			remoteInfo = yazar;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXProject section */
 		14A0E8D1304355EF009CC89B /* Project object */ = {
@@ -85,6 +133,10 @@
 				TargetAttributes = {
 					14A0E8D8304355EF009CC89B = {
 						CreatedOnToolsVersion = 26.6;
+					};
+					14A0E8F530500000009CC89B = {
+						CreatedOnToolsVersion = 26.6;
+						TestTargetID = 14A0E8D8304355EF009CC89B;
 					};
 				};
 			};
@@ -103,12 +155,20 @@
 			projectRoot = "";
 			targets = (
 				14A0E8D8304355EF009CC89B /* yazar */,
+				14A0E8F530500000009CC89B /* yazarTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		14A0E8D7304355EF009CC89B /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		14A0E8F330500000009CC89B /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -125,7 +185,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		14A0E8F430500000009CC89B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		14A0E8F730500000009CC89B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 14A0E8D8304355EF009CC89B /* yazar */;
+			targetProxy = 14A0E8F630500000009CC89B /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		14A0E8E2304355F0009CC89B /* Debug */ = {
@@ -323,6 +398,48 @@
 			};
 			name = Release;
 		};
+		14A0E8F830500000009CC89B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = QDPT7T5TDG;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = egeis.yazarTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/yazar.app/Contents/MacOS/yazar";
+			};
+			name = Debug;
+		};
+		14A0E8F930500000009CC89B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = QDPT7T5TDG;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = egeis.yazarTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/yazar.app/Contents/MacOS/yazar";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -340,6 +457,15 @@
 			buildConfigurations = (
 				14A0E8E5304355F0009CC89B /* Debug */,
 				14A0E8E6304355F0009CC89B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		14A0E8FA30500000009CC89B /* Build configuration list for PBXNativeTarget "yazarTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				14A0E8F830500000009CC89B /* Debug */,
+				14A0E8F930500000009CC89B /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
