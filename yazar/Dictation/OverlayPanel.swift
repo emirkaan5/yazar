@@ -6,6 +6,7 @@ import SwiftUI
 final class OverlayPanel {
     private let yazar: Yazar
     private let panel: NSPanel
+    private var hideTask: Task<Void, Never>?
 
     init(yazar: Yazar) {
         self.yazar = yazar
@@ -44,25 +45,18 @@ final class OverlayPanel {
 
     private func updateVisibility() {
         if yazar.state == .idle {
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.35
-                panel.animator().alphaValue = 0
-            } completionHandler: { [weak self] in
-                MainActor.assumeIsolated {
-                    // A new session may have started during the fade; don't hide it.
-                    guard let self, self.yazar.state == .idle else { return }
-                    self.panel.orderOut(nil)
-                }
+            hideTask?.cancel()
+            hideTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(OverlayView.capsuleAnimationDuration))
+                guard !Task.isCancelled, let self, self.yazar.state == .idle else { return }
+                self.panel.orderOut(nil)
+                self.hideTask = nil
             }
             return
         }
 
-        // A new session can begin while the old one is fading. Restore alpha even when
-        // the panel is still ordered in, otherwise that whole session stays transparent.
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0
-            panel.animator().alphaValue = 1
-        }
+        hideTask?.cancel()
+        hideTask = nil
 
         // Position once per session. State changes while recording (warmingUp ->
         // recording -> transcribing) must not move the panel out from under the
