@@ -6,6 +6,16 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXContainerItemProxy section */
+		14A0E8F630500000009CC89B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 14A0E8D1304355EF009CC89B /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 14A0E8D8304355EF009CC89B;
+			remoteInfo = yazar;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		14A0E8D9304355EF009CC89B /* yazar.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = yazar.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		14A0E8F030500000009CC89B /* yazarTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = yazarTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -112,16 +122,6 @@
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
-
-/* Begin PBXContainerItemProxy section */
-		14A0E8F630500000009CC89B /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 14A0E8D1304355EF009CC89B /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 14A0E8D8304355EF009CC89B;
-			remoteInfo = yazar;
-		};
-/* End PBXContainerItemProxy section */
 
 /* Begin PBXProject section */
 		14A0E8D1304355EF009CC89B /* Project object */ = {

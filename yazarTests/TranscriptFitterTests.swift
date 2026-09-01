@@ -17,22 +17,12 @@ struct TranscriptFitterTests {
     @Test(
         "Matches a selection's initial case",
         arguments: [
-            (selected: "unhelpful", transcript: "Very useful", proper: false, expected: "very useful"),
-            (selected: "Unhelpful", transcript: "Very useful", proper: false, expected: "Very useful"),
-            (selected: "unhelpful", transcript: "Very useful", proper: true, expected: "Very useful"),
+            (selected: "unhelpful", transcript: "Very useful", expected: "very useful"),
+            (selected: "Unhelpful", transcript: "Very useful", expected: "Very useful"),
         ]
     )
-    func selectionInitialCase(
-        selected: String,
-        transcript: String,
-        proper: Bool,
-        expected: String
-    ) {
-        #expect(fit(
-            transcript,
-            selected: selected,
-            startsWithProperNoun: proper
-        ) == expected)
+    func selectionInitialCase(selected: String, transcript: String, expected: String) {
+        #expect(fit(transcript, selected: selected) == expected)
     }
 
     @Test(
@@ -99,26 +89,20 @@ struct TranscriptFitterTests {
     @Test(
         "Adds a leading boundary space from only the final left character",
         arguments: [
-            (before: "hello", expected: " Hello"),
-            (before: "hello.", expected: " Hello"),
-            (before: "hello ", expected: "Hello"),
-            (before: "(", expected: "Hello"),
-            (before: "word-", expected: "Hello"),
-            (before: "word -", expected: " Hello"),
-            (before: "/", expected: " Hello"),
-            (before: "漢", expected: "Hello"),
-            (before: "あ", expected: "Hello"),
-            (before: "カ", expected: "Hello"),
+            (before: "hello", expected: " hello"),
+            (before: "hello.", expected: " hello"),
+            (before: "hello ", expected: "hello"),
+            (before: "(", expected: "hello"),
+            (before: "word-", expected: "hello"),
+            (before: "word -", expected: " hello"),
+            (before: "/", expected: " hello"),
+            (before: "漢", expected: "hello"),
+            (before: "あ", expected: "hello"),
+            (before: "カ", expected: "hello"),
         ]
     )
     func leadingBoundarySpace(before: String, expected: String) {
-        #expect(fit(
-            "Hello",
-            before: before,
-            after: " Next",
-            startsWithProperNoun: true,
-            properNouns: ["Hello"]
-        ) == expected)
+        #expect(fit("hello", before: before, after: " Next") == expected)
     }
 
     @Test(
@@ -135,7 +119,7 @@ struct TranscriptFitterTests {
         ]
     )
     func trailingBoundarySpace(after: String, expected: String) {
-        #expect(fit("Hello,", after: after, startsWithProperNoun: true) == expected)
+        #expect(fit("Hello,", after: after) == expected)
     }
 
     @Test(
@@ -174,13 +158,7 @@ struct TranscriptFitterTests {
                 "selection punctuation: \(punctuation)"
             )
             #expect(
-                fit(
-                    "Hello",
-                    before: String(punctuation),
-                    after: " Next",
-                    startsWithProperNoun: true,
-                    properNouns: ["Hello"]
-                ) == " Hello",
+                fit("Hello", before: String(punctuation), after: " Next") == " Hello",
                 "leading punctuation: \(punctuation)"
             )
         }
@@ -190,41 +168,19 @@ struct TranscriptFitterTests {
     func operatorCharacters() {
         for operatorCharacter in Array("\\/|-&*+=~") {
             #expect(
-                fit(
-                    "Hello",
-                    before: String(operatorCharacter),
-                    after: " Next",
-                    startsWithProperNoun: true,
-                    properNouns: ["Hello"]
-                ) == " Hello",
+                fit("hello", before: String(operatorCharacter), after: " Next") == " hello",
                 "single left operator: \(operatorCharacter)"
             )
             #expect(
-                fit(
-                    "Hello",
-                    before: "word\(operatorCharacter)",
-                    after: " Next",
-                    startsWithProperNoun: true,
-                    properNouns: ["Hello"]
-                ) == "Hello",
+                fit("hello", before: "word\(operatorCharacter)", after: " Next") == "hello",
                 "attached left operator: \(operatorCharacter)"
             )
             #expect(
-                fit(
-                    "Hello",
-                    before: "word \(operatorCharacter)",
-                    after: " Next",
-                    startsWithProperNoun: true,
-                    properNouns: ["Hello"]
-                ) == " Hello",
+                fit("hello", before: "word \(operatorCharacter)", after: " Next") == " hello",
                 "separated left operator: \(operatorCharacter)"
             )
             #expect(
-                fit(
-                    "Hello,",
-                    after: "\(operatorCharacter) word",
-                    startsWithProperNoun: true
-                ) == "Hello, ",
+                fit("Hello,", after: "\(operatorCharacter) word") == "Hello, ",
                 "right operator: \(operatorCharacter)"
             )
         }
@@ -247,47 +203,6 @@ struct TranscriptFitterTests {
         ) == "Hello.")
     }
 
-    @Test("Refines single-token proper noun flags by exact membership")
-    func singleTokenProperNouns() {
-        #expect(fit(
-            "Alice",
-            before: "hello",
-            after: " Next",
-            startsWithProperNoun: true
-        ) == " alice")
-        #expect(fit(
-            "Alice",
-            before: "hello",
-            after: " Next",
-            startsWithProperNoun: true,
-            properNouns: ["Alice"]
-        ) == " Alice")
-        #expect(fit(
-            "Alice",
-            before: "hello",
-            after: " Next",
-            startsWithProperNoun: true,
-            properNouns: ["alice"]
-        ) == " alice")
-        #expect(fit(
-            "Alice Smith",
-            before: "hello",
-            after: " Next",
-            startsWithProperNoun: true
-        ) == " Alice Smith")
-    }
-
-    @Test("Finds the first Unicode letter run in a single token")
-    func firstLetterRun() {
-        #expect(fit(
-            "“Alice,”",
-            before: "hello",
-            after: " Next",
-            startsWithProperNoun: true,
-            properNouns: ["Alice"]
-        ) == " “Alice,”")
-    }
-
     @Test("Lowercasing changes only the first character and skips one-character output")
     func lowercaseFirstOnly() {
         #expect(fit("HELLO", before: "word", after: " Next") == " hELLO")
@@ -304,9 +219,7 @@ struct TranscriptFitterTests {
         _ transcript: String,
         before: String = "",
         selected: String = "",
-        after: String = "",
-        startsWithProperNoun: Bool = false,
-        properNouns: Set<String> = []
+        after: String = ""
     ) -> String {
         TranscriptFitter.fit(
             transcript,
@@ -314,9 +227,7 @@ struct TranscriptFitterTests {
                 beforeText: before,
                 selectedText: selected,
                 afterText: after
-            ),
-            startsWithProperNoun: startsWithProperNoun,
-            properNouns: properNouns
+            )
         )
     }
 }

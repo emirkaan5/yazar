@@ -1,6 +1,10 @@
 # Context-Aware Insertion Design Brief
 
-Status: implemented September 1, 2026.
+Status: implemented September 1, 2026. Simplified the same day; see
+`context-aware-insertion-simplification.md` for what moved and why.
+
+For the implementation history, real-application diagnostics, and reviewer checklist,
+see `docs/plans/context-aware-insertion-review-handoff.md`.
 
 ## What and why
 
@@ -55,7 +59,7 @@ The initializer rejects negative, overflowing, or out-of-bounds ranges. It perfo
 
 ### `TextContextCapture`
 
-A main-actor session object that hides Accessibility representations, focus observation, traversal, and the Apple Notes correction. It owns no formatting policy.
+A main-actor session object that owns session timing: when to look, which application to watch, which snapshot survives, and the Apple Notes correction. It owns no formatting policy. Reading a textbox is `TextContextSearch`; reading one AX attribute is `AXElement`.
 
 ```swift
 @MainActor
@@ -75,15 +79,17 @@ final class TextContextCapture {
 
 `begin()` is idempotent by first cancelling an unfinished session. `finish()` and `cancel()` leave the object ready for reuse. Neither method throws: unavailable context is an expected degradation state, not a dictation failure.
 
+`TextContextSearch` performs steps 2 through 5 below for one traversal and then dies; `probes` is its scratch table, not state that outlives the answer. `AXElement` extends `AXUIElement` with typed, failure-tolerant reads so no caller repeats a `CFGetTypeID` check or an `as CFString` cast.
+
 The capture session performs these operations behind that interface:
 
 1. Identify the frontmost process, opt its application element into `AXManualAccessibility` and `AXEnhancedUserInterface`, then read `kAXFocusedUIElementAttribute` from the system-wide AX element. Chromium and Electron can otherwise withhold the useful focused node entirely. Reacquire the focused element after activation and resolve its owning process and bundle ID.
-3. Recover contents through `AXValue`, a full `AXStartTextMarker`/`AXEndTextMarker` document range, or `AXNumberOfCharacters` plus parameterized `AXStringForRange`.
-4. Recover selections through `AXSelectedTextRange`, `AXSharedCharacterRange`, every usable `AXSelectedTextRanges` entry, and `AXSelectedTextMarkerRange`. Decode ordinary ranges as `CFRange`. Preserve marker ranges until contents and selection nodes have been paired, then ask both nodes to translate the endpoints with `AXIndexForTextMarker`; web editors often expose the marker on a focused child but only let the web-area ancestor convert it. Feed every resulting UTF-16 range through the same validated `TextInsertionContext` constructor.
-5. Traverse the focused subtree with both `AXVisibleChildren` and `AXChildren`, then follow only the focused element's ancestor chain. Keep the walk cycle-safe and bounded to 1,000 elements; do not fan back out through ancestors' unrelated siblings. Match Flow's role order: evaluate static text and text fields directly, evaluate childless text areas directly, and search a generic focused parent's descendants before falling back to that parent.
-6. Reconcile contents and selection state exposed on different ancestor/descendant nodes. Keep conventional and marker coordinate spaces separate while trying every distinct representation an element exposes; an empty `AXValue` must not hide nonempty `AXStringForRange` contents. For direct text roles, prefer local value/range state before marker state because Electron can inherit document-wide markers onto a field-local `AXTextArea`. Only focused-subtree text, group, and web-area nodes may supply marker selections, preventing document markers inherited by checkboxes and ancestor containers from masquerading as textbox context. If any selected-text representation agrees with the range contents, accept it. Otherwise continue probing or use an exact selected-text occurrence only when it appears once, instead of returning known-wrong context.
-7. Apply the Apple Notes correction inside capture, where the AX ambiguity belongs: for bundle ID `com.apple.notes`, an empty selection, nonempty `afterText`, and `beforeText` ending in `\n`, move that newline to the start of `afterText`.
-8. Treat unsupported attributes, invalid types or ranges, traversal exhaustion, and permission loss as nil. Do not consult AX editability before returning context and do not block `Inserter`.
+2. Recover contents through `AXValue`, a full `AXStartTextMarker`/`AXEndTextMarker` document range, or `AXNumberOfCharacters` plus parameterized `AXStringForRange`.
+3. Recover selections through `AXSelectedTextRange`, `AXSharedCharacterRange`, every usable `AXSelectedTextRanges` entry, and `AXSelectedTextMarkerRange`. Decode ordinary ranges as `CFRange`. Preserve marker ranges until contents and selection nodes have been paired, then ask both nodes to translate the endpoints with `AXIndexForTextMarker`; web editors often expose the marker on a focused child but only let the web-area ancestor convert it. Feed every resulting UTF-16 range through the same validated `TextInsertionContext` constructor.
+4. Traverse the focused subtree with both `AXVisibleChildren` and `AXChildren`, then follow only the focused element's ancestor chain. Keep the walk cycle-safe and bounded to 1,000 elements; do not fan back out through ancestors' unrelated siblings. Match Flow's role order: evaluate static text and text fields directly, evaluate childless text areas directly, and search a generic focused parent's descendants before falling back to that parent.
+5. Reconcile contents and selection state exposed on different ancestor/descendant nodes. Keep conventional and marker coordinate spaces separate while trying every distinct representation an element exposes; an empty `AXValue` must not hide nonempty `AXStringForRange` contents. For direct text roles, prefer local value/range state before marker state because Electron can inherit document-wide markers onto a field-local `AXTextArea`. Only focused-subtree text, group, and web-area nodes may supply marker selections, preventing document markers inherited by checkboxes and ancestor containers from masquerading as textbox context. If any selected-text representation agrees with the range contents, accept it. Otherwise continue probing or use an exact selected-text occurrence only when it appears once, instead of returning known-wrong context.
+6. Apply the Apple Notes correction inside capture, where the AX ambiguity belongs: for bundle ID `com.apple.notes`, an empty selection, nonempty `afterText`, and `beforeText` ending in `\n`, move that newline to the start of `afterText`.
+7. Treat unsupported attributes, invalid types or ranges, traversal exhaustion, and permission loss as nil. Do not consult AX editability before returning context and do not block `Inserter`.
 
 Focus tracking follows AX's real process boundary. The session observes `kAXFocusedUIElementChangedNotification` on the current application's AX root, and watches `NSWorkspace.didActivateApplicationNotification` to replace that per-process observer when the active app changes. Both events refresh the snapshot. The AX run-loop source runs on the main run loop, so its C callback re-enters the already-isolated object with `MainActor.assumeIsolated`; it does not introduce GCD. A target that does not support notifications still gets the mandatory start and stop captures.
 
@@ -95,22 +101,16 @@ A stateless pure module that owns the complete generic rule table and its Unicod
 nonisolated enum TranscriptFitter {
     /// Fits an already-formatted transcript into the supplied textbox context.
     /// It mutates no state and returns the exact input only when it is empty.
-    static func fit(
-        _ transcript: String,
-        to context: TextInsertionContext,
-        startsWithProperNoun: Bool,
-        properNouns: Set<String>
-    ) -> String
+    static func fit(_ transcript: String, to context: TextInsertionContext) -> String
 }
 ```
 
-The caller supplies a `Set<String>` because the specified check is exact membership. The formatter does not fetch profile, OCR, AX, personal, or team data itself.
+The formatter fetches no profile, OCR, AX, personal, or team data. It takes the transcript and the surrounding text, and nothing else.
 
 The implementation keeps the shipped ordering in one function, with private classification predicates beside it rather than exposing a rule engine:
 
 - Return a zero-length transcript unchanged; otherwise trim Unicode whitespace and newlines.
 - Derive `lineBefore` after the final newline and `lineAfter` before the first newline, preserving empty lines and the untrimmed boundary strings.
-- Refine a supplied proper-noun flag only for output with no literal ASCII space. Find the first contiguous Unicode-letter run and require exact set membership; an absent run also forces the flag off.
 - Branch once on `selectedText.isEmpty`. A whitespace-only selection remains active.
 - In the selection branch, apply S1 through S4 in order and return immediately.
 - In the caret branch, apply C1 through C4 in order.
@@ -147,14 +147,7 @@ Delivery chooses formatting only when context exists:
 
 ```swift
 private func deliver(_ text: String, context: TextInsertionContext?) {
-    let textToPaste = context.map {
-        TranscriptFitter.fit(
-            text,
-            to: $0,
-            startsWithProperNoun: false,
-            properNouns: []
-        )
-    } ?? text
+    let textToPaste = context.map { TranscriptFitter.fit(text, to: $0) } ?? text
 
     switch Inserter.insert(textToPaste) {
         // Existing outcome handling stays unchanged.
@@ -162,7 +155,7 @@ private func deliver(_ text: String, context: TextInsertionContext?) {
 }
 ```
 
-Yazar currently receives only a `String` from both transcribers and owns no proper-noun vocabulary, so the first implementation passes `false` and an empty set explicitly. That preserves the handoff's defined fallback rather than inventing a name detector. A later server post-processing response or vocabulary owner changes this one call; AX capture and fitting do not change.
+Yazar receives only a `String` from both transcribers and owns no proper-noun vocabulary. The formatter therefore takes no proper-noun arguments: passing `false` and an empty set made both guards unconditionally true, so they described capability that could not run. When a server post-processing response or a vocabulary owner exists, restoring the rule is one parameter, one branch, and this one call site. AX capture and delivery do not change.
 
 `Inserter.insert(_:)` receives the final text and remains unchanged. In particular, nil context sends the original transcript—not a trimmed or partially adjusted value—to the clipboard and still attempts Command-V.
 
@@ -170,7 +163,9 @@ Yazar currently receives only a `String` from both transcribers and owns no prop
 
 - Move `yazar/Dictation/Inserter.swift` to `yazar/Insertion/Inserter.swift` so all insertion behavior has one feature home; its contents and public behavior stay unchanged.
 - Add `yazar/Insertion/TextInsertionContext.swift` for the canonical value and UTF-16-safe construction.
-- Add `yazar/Insertion/TextContextCapture.swift` for AX reads, bounded traversal, focus observation, and Notes correction.
+- Add `yazar/Insertion/TextContextCapture.swift` for session timing, focus observation, application opt-in, and the Notes correction.
+- Add `yazar/Insertion/TextContextSearch.swift` for the bounded traversal and representation pairing of one capture.
+- Add `yazar/Insertion/AXElement.swift` for typed, failure-tolerant reads over the C Accessibility API.
 - Add `yazar/Insertion/TranscriptFitter.swift` for the pure ordered ruleset.
 - Update `yazar/Dictation/Yazar.swift` only at capture lifecycle and delivery call sites.
 - Add a filesystem-synchronized `yazarTests` group and Swift Testing target to `yazar.xcodeproj`, attach it to the shared `yazar` scheme's Test action, and preserve Main Actor/Swift 6.2-compatible build settings. The repository currently has no test target despite documenting one.
@@ -186,7 +181,6 @@ Use Swift Testing and test observable results through `TranscriptFitter.fit`, no
 - Every example in `isContinuingBefore`, `isContinuingAfter`, and `shouldAddLeadingSpace` by choosing contexts whose fitted output distinguishes true from false.
 - Every S1-S4 and C1-C4 example, plus interactions that prove order: lowercase plus leading space, punctuation removal plus trailing space, and selection whitespace preservation after punctuation removal.
 - Empty input versus whitespace-only input, one-character output, whitespace-only selection, multiple selected boundary spaces, tabs, non-breaking spaces, and empty current lines after newlines.
-- Exact single-token proper-noun membership, case mismatch, multiword trust, punctuation before the first letter run, and a token containing only nonletters.
 - Unicode letters and numbers, caseless letters, combining marks, emoji, Han/Hiragana/Katakana leading-space suppression, and every East Asian terminal punctuation mark.
 - All boundary-bridge, closing/preceding punctuation, and operator characters, including the operator-at-start and operator-after-space cases.
 - UTF-16 construction with BMP text, emoji/surrogate pairs before and inside a selection, combining sequences, a range at the end, and rejection of negative, overflowing, split-surrogate, and out-of-bounds ranges.
@@ -213,7 +207,7 @@ AX behavior needs real-process checks because a fake AX protocol would only test
 
 ## Next sibling
 
-App-specific formatting adds one policy decision beside `TranscriptFitter` and selects it in `Yazar` using `context.applicationBundleIdentifier`; it does not modify AX traversal or `Inserter`. Proper-noun sources only populate the existing two formatter arguments.
+App-specific formatting adds one policy decision beside `TranscriptFitter` and selects it in `Yazar` using `context.applicationBundleIdentifier`; it does not modify AX traversal or `Inserter`. Proper-noun sources re-add one flag and one set to `fit`, restoring the branch deleted with them.
 
 ## Not building
 

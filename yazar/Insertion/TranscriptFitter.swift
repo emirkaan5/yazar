@@ -11,25 +11,13 @@ nonisolated enum TranscriptFitter {
         "。、，．！？；：…‥「」『』（）〔〕【】《》〈〉〝〞〟・"
     )
 
-    /// Applies the local rules in their defined order. The proper-noun set uses
-    /// exact, case-sensitive membership; no source lookup happens here.
-    static func fit(
-        _ transcript: String,
-        to context: TextInsertionContext,
-        startsWithProperNoun suppliedProperNounFlag: Bool,
-        properNouns: Set<String>
-    ) -> String {
+    /// Applies the local rules in their defined order.
+    static func fit(_ transcript: String, to context: TextInsertionContext) -> String {
         guard !transcript.isEmpty else { return transcript }
 
         var output = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         let lineBefore = currentLineBefore(in: context.beforeText)
         let lineAfter = currentLineAfter(in: context.afterText)
-        var startsWithProperNoun = suppliedProperNounFlag
-
-        if !output.contains(" "),
-           !properNouns.contains(firstLetterRun(in: output)) {
-            startsWithProperNoun = false
-        }
 
         if !context.selectedText.isEmpty {
             let trimmedSelection = String(
@@ -38,8 +26,7 @@ nonisolated enum TranscriptFitter {
 
             if let first = trimmedSelection.first,
                isLetter(first),
-               first.lowercased() == String(first),
-               !startsWithProperNoun {
+               first.lowercased() == String(first) {
                 output = lowercasingFirstCharacter(of: output)
             }
 
@@ -56,7 +43,7 @@ nonisolated enum TranscriptFitter {
             return output
         }
 
-        if isContinuingBefore(lineBefore), !startsWithProperNoun {
+        if isContinuingBefore(lineBefore) {
             output = lowercasingFirstCharacter(of: output)
         }
 
@@ -84,20 +71,6 @@ nonisolated enum TranscriptFitter {
     private static func currentLineAfter(in text: String) -> String {
         guard let newline = text.firstIndex(of: "\n") else { return text }
         return String(text[..<newline])
-    }
-
-    private static func firstLetterRun(in text: String) -> String {
-        var word = ""
-        var foundFirstLetter = false
-        for character in text {
-            if isLetter(character) {
-                foundFirstLetter = true
-                word.append(character)
-            } else if foundFirstLetter {
-                break
-            }
-        }
-        return word
     }
 
     private static func isContinuingBefore(_ lineBefore: String) -> Bool {
@@ -165,6 +138,10 @@ nonisolated enum TranscriptFitter {
         isLetter(character) || isNumber(character)
     }
 
+    // Not `Character.isLetter`/`isNumber`: those use the Unicode Alphabetic
+    // property, which classifies 1,059 more BMP scalars as letters, including
+    // Indic vowel signs and circled letters. These rules were verified against
+    // general categories, so they ask for those.
     private static func isLetter(_ character: Character) -> Bool {
         character.unicodeScalars.contains { scalar in
             switch scalar.properties.generalCategory {
@@ -188,10 +165,11 @@ nonisolated enum TranscriptFitter {
         }
     }
 
+    /// Han, Hiragana, and Katakana do not separate words with spaces, so a
+    /// fitted transcript must not gain a leading one.
     private static func belongsToUnspacedScript(_ character: Character) -> Bool {
-        guard let expression = try? Regex(
-            #"^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]$"#
-        ) else { return false }
-        return String(character).wholeMatch(of: expression) != nil
+        String(character).wholeMatch(
+            of: /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/
+        ) != nil
     }
 }

@@ -245,14 +245,7 @@ final class Yazar {
             showNoSpeech()
             return
         }
-        let textToPaste = context.map {
-            TranscriptFitter.fit(
-                text,
-                to: $0,
-                startsWithProperNoun: false,
-                properNouns: []
-            )
-        } ?? text
+        let textToPaste = context.map { TranscriptFitter.fit(text, to: $0) } ?? text
         switch Inserter.insert(textToPaste) {
         case .delivered:
             state = .idle

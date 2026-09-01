@@ -21,4 +21,4 @@ enum DictationFailure: Hashable {
         case .transcription(let message): message
         }
     }
-} 
+}
