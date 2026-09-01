@@ -1,6 +1,6 @@
 # Yazar
 
-<img width="400" alt="yazar" src="https://github.com/user-attachments/assets/d75fcd7c-4c5e-4c80-9d8a-66f117e3bdcb" />
+<img width="500" alt="yazar_intro" src="https://github.com/user-attachments/assets/0593fad3-8aae-40b9-a3cf-3b86097bd94e" />
 
 
 Yazar is a small macOS app that does one thing well: speech to text.
