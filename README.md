@@ -3,9 +3,9 @@
 <img width="500" alt="yazar_intro" src="https://github.com/user-attachments/assets/0593fad3-8aae-40b9-a3cf-3b86097bd94e" />
 
 
-Yazar is a small macOS app that does one thing well: speech to text.
+Yazar is a focused macOS app that does one thing: speech to text.
 
-I built it because every option I found was either a heavy Electron app that didn't feel snappy, paid, or both. Yazar is native, lightweight, and gets out of your way.
+I built it because the options I found were heavy Electron apps, paid, or both. Yazar is lightweight, native, launches instantly, and disappears when you're done.
 
 ## Features
 
