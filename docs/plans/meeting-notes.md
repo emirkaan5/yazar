@@ -78,6 +78,42 @@ Note for the UI: capturing system audio lights the macOS screen-recording
 indicator for the duration of the meeting. Say so on the start control rather
 than letting the user discover it.
 
+### Meeting detection
+
+Detect that a meeting is happening and **offer** to record it. Never start a
+recording on a heuristic. A false positive that merely shows a prompt is a minor
+annoyance; a false positive that silently records other people is not something
+to hand a user by default.
+
+**The signal is microphone occupancy, not app lifetime.** Watching
+`NSWorkspace` for Teams launching is the obvious approach and the wrong one:
+Teams runs all day, so the prompt would arrive at login rather than at meeting
+time. `kAudioDevicePropertyDeviceIsRunningSomewhere` on the default input device
+reports whether any process currently holds the microphone. Teams, Zoom, and
+Meet open it when a call starts and release it when the call ends, so it tracks
+the meeting itself. It needs no new permission, and `AudioInput` already does
+Core Audio work of this kind.
+
+Use `AudioObjectAddPropertyListenerBlock` rather than polling, and narrow the
+result with a bundle identifier check against `NSWorkspace.runningApplications`.
+
+Known limits, none of them fatal but all worth stating in the UI rather than
+pretending to certainty:
+
+- **Yazar trips its own detector.** `Recorder` opens the microphone for every
+  dictation. Self-exclusion is mandatory, not an optimisation.
+- **A browser is ambiguous.** Meet in a tab is indistinguishable from any other
+  page using the microphone.
+- **The signal and the capture do not match.** Microphone occupancy is the
+  trigger, but meeting mode records system audio. A call where nobody ever opens
+  a microphone would go undetected, and unrelated microphone use looks like a
+  meeting.
+- **Mute behaviour is app-dependent.** Most clients keep the device open while
+  muted, but that is a convention rather than a guarantee.
+
+Because the prompt can fire on unrelated microphone use, it needs a setting to
+turn off. Default it on: the prompt is the feature.
+
 ### Storage of in-flight audio
 
 `CaptureSink` accumulates into a single `Data` and drains at the end. At 16 kHz
@@ -345,6 +381,7 @@ New, `yazar/Meetings/`:
 - `Meeting.swift` - the stored model
 - `MeetingSegment.swift` - one capture run, with wall-clock bounds
 - `MeetingStore.swift` - persistence and enumeration
+- `MeetingDetector.swift` - microphone-occupancy watcher behind the record offer
 - `MeetingsWindowController.swift`
 - `MeetingListView.swift`
 - `MeetingDetailView.swift`
@@ -365,7 +402,7 @@ Modified:
 - `Transcription/OpenRouterTranscriber.swift` - chunking, per-chunk timeout
 - `Transcription/Transcriber.swift` - a streaming entry point alongside the
   one-shot one
-- `Settings/Settings.swift` - notes model, audio retention
+- `Settings/Settings.swift` - notes model, audio retention, detection prompt
 - `Settings/Permissions.swift` - screen recording, kept out of `allGranted`
 - `Settings/YazarView.swift` - settings for the above
 - `yazarApp.swift` - meeting menu items, meetings window, icon state,
@@ -395,7 +432,11 @@ Ordered so each phase ships something and the permission-gated work comes late.
    permission, start/stop from the menu bar.
 4. **Long-form transcription.** Streaming Apple Speech with live transcript in the
    window; chunked OpenRouter.
-5. **Polish.** Silence-based chunk boundaries, audio retention setting, export,
+5. **Meeting detection.** `MeetingDetector` on the input device's
+   `IsRunningSomewhere` property, narrowed by bundle identifier, with
+   self-exclusion for Yazar's own dictation. Surfaces an offer to start
+   recording, never a recording. Setting to disable the prompt.
+6. **Polish.** Silence-based chunk boundaries, audio retention setting, export,
    cost display for the OpenRouter paths.
 
 ## Dictated asides
