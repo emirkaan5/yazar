@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import CoreGraphics
 import ApplicationServices
 import Observation
 import SwiftUI
@@ -9,9 +10,14 @@ import SwiftUI
 final class Permissions {
     private(set) var microphoneGranted = false
     private(set) var accessibilityGranted = false
+    private(set) var screenRecordingGranted = false
     private(set) var fnUsage = 0
     private var pollTask: Task<Void, Never>?
 
+    /// Screen Recording is deliberately absent: only meetings need it, and this
+    /// property gates whether the dictation engine starts at all. Including an
+    /// optional permission here would stop dictation working for everyone who
+    /// never records a meeting.
     var allGranted: Bool {
         microphoneGranted && accessibilityGranted
     }
@@ -21,6 +27,7 @@ final class Permissions {
     func refresh() {
         microphoneGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
         accessibilityGranted = AXIsProcessTrusted()
+        screenRecordingGranted = CGPreflightScreenCaptureAccess()
         fnUsage = UserDefaults(suiteName: ".GlobalPreferences")?.integer(forKey: "AppleFnUsageType") ?? 0
     }
 
@@ -37,6 +44,16 @@ final class Permissions {
         @unknown default:
             openPrivacySettings("Privacy_Microphone")
         }
+    }
+
+    /// Asked for when a meeting starts rather than during onboarding, since
+    /// dictation never needs it. Starting a capture prompts on its own too; this
+    /// is the settings screen's way in.
+    func requestScreenRecording() {
+        if !CGRequestScreenCaptureAccess() {
+            openPrivacySettings("Privacy_ScreenCapture")
+        }
+        refresh()
     }
 
     func requestAccessibility() {

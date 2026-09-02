@@ -12,6 +12,11 @@ struct YazarApp: App {
                 appDelegate.showApp()
             }
 
+            Button(appDelegate.meetingActionTitle) {
+                appDelegate.toggleMeeting()
+            }
+            .disabled(appDelegate.isMeetingBusy)
+
             Button("Meetings") {
                 appDelegate.showMeetings()
             }
@@ -34,6 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let yazar: Yazar
     private let store: MeetingStore
     private let composer: NotesComposer
+    private let session: MeetingSession
     private let meetingsWindow: MeetingsWindowController
     private var selectedPage = AppPage.dictation
     private var overlayPanel: OverlayPanel?
@@ -46,18 +52,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let store = MeetingStore()
         self.store = store
         composer = NotesComposer(settings: settings, store: store)
+        session = MeetingSession(store: store)
         meetingsWindow = MeetingsWindowController(store: store)
         super.init()
         permissions.refresh()
     }
 
+    /// Dictation wins the icon while it is happening: it lasts seconds and the
+    /// user is watching for it. A meeting runs for an hour underneath.
     var menuBarIcon: String {
         switch yazar.state {
-        case .idle, .noSpeech: "waveform"
         case .warmingUp, .recording: "waveform.circle.fill"
         case .transcribing: "ellipsis.circle"
         case .error: "exclamationmark.circle"
+        case .idle, .noSpeech: session.isRecording ? "record.circle" : "waveform"
         }
+    }
+
+    var meetingActionTitle: String {
+        session.isRecording ? "Stop Meeting" : "Start Meeting"
+    }
+
+    /// Start and stop both await the stream, so the menu item is held shut
+    /// rather than letting a second press land mid-transition.
+    var isMeetingBusy: Bool {
+        switch session.state {
+        case .starting, .stopping: true
+        case .idle, .recording, .failed: false
+        }
+    }
+
+    func toggleMeeting() {
+        Task { @MainActor in
+            if session.isRecording {
+                await session.stop()
+            } else {
+                await session.start()
+                if case .failed(let message) = session.state {
+                    presentMeetingFailure(message)
+                }
+            }
+        }
+    }
+
+    /// Meetings are started from the menu bar, where there is nowhere to show an
+    /// error, and the dictation overlay belongs to dictation.
+    private func presentMeetingFailure(_ message: String) {
+        let alert = NSAlert()
+        alert.messageText = "Yazar could not start the meeting."
+        alert.informativeText = message
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "OK")
+        NSApp.activate()
+        alert.runModal()
     }
 
     /// The system requirements for the trigger selected right now. Keeping this
@@ -84,8 +131,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
+    /// A meeting in flight is closed before the process goes, which is the
+    /// graceful half of recovery. The scan on next launch is the other half, for
+    /// the quits that never reach here.
     func applicationWillTerminate(_ notification: Notification) {
         yazar.stop()
+        session.endForTermination()
     }
 
     func showMeetings() {

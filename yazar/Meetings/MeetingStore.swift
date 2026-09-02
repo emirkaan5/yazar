@@ -98,6 +98,18 @@ final class MeetingStore {
         }
     }
 
+    /// The directory a meeting owns, created on demand. Audio lives here beside
+    /// the record rather than inside it, being large and binary.
+    func directory(for meeting: Meeting) throws -> URL {
+        let directory = root.appending(path: meeting.id.uuidString, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+
+    func audioURL(for meeting: Meeting) throws -> URL {
+        try directory(for: meeting).appending(path: "audio.pcm", directoryHint: .notDirectory)
+    }
+
     private static func recordURL(in directory: URL) -> URL {
         directory.appending(path: "meeting.json", directoryHint: .notDirectory)
     }
