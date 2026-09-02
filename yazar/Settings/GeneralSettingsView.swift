@@ -8,14 +8,6 @@ struct GeneralSettingsView: View {
     @State private var isAddingCustomModel = false
     @FocusState private var customModelFocused: Bool
 
-    // Sentinel selection for the pop-up's escape-hatch item; never reaches Settings.
-    private static let customModelTag = "\u{0}add-custom-model"
-
-    private let suggestedModels = [
-        "openai/gpt-transcribe",
-        "mistralai/voxtral-mini-transcribe",
-    ]
-
     var body: some View {
         SettingsSection("Transcription") {
             SettingsRow("Provider", description: settings.transcriptionProvider.summary) {
@@ -58,22 +50,32 @@ struct GeneralSettingsView: View {
                     "Model",
                     description: "OpenRouter model used to transcribe recordings."
                 ) {
-                    Picker("Model", selection: modelSelection) {
+                    // A Menu rather than a Picker: menu items only carry a
+                    // description when their label is two Text views, which a
+                    // Picker's tagged items can't be. Toggles draw the
+                    // checkmark the pop-up drew for free.
+                    Menu {
                         Section("Suggested Models") {
-                            ForEach(suggestedModels, id: \.self) { model in
-                                Text(model).tag(model)
+                            ForEach(SuggestedModel.all) { model in
+                                Toggle(isOn: selectionOf(model.id)) {
+                                    Text(model.id)
+                                    Text(model.summary)
+                                }
                             }
                         }
 
-                        if !suggestedModels.contains(settings.openRouterModel) {
+                        if !isSuggested(settings.openRouterModel) {
                             Section("Custom Model") {
-                                Text(settings.openRouterModel).tag(settings.openRouterModel)
+                                Toggle(isOn: selectionOf(settings.openRouterModel)) {
+                                    Text(settings.openRouterModel)
+                                }
                             }
                         }
 
-                        Text("Add a Custom Model…").tag(Self.customModelTag)
+                        Button("Add a Custom Model…") { startAddingCustomModel() }
+                    } label: {
+                        Text(settings.openRouterModel)
                     }
-                    .labelsHidden()
                     .frame(width: 220)
                     .sheet(isPresented: $isAddingCustomModel) { customModelSheet }
                 }
@@ -103,20 +105,25 @@ struct GeneralSettingsView: View {
         .onChange(of: settings.language) { _, _ in refreshSpeechModel() }
     }
 
-    // Selecting the escape-hatch item opens the sheet instead of storing the sentinel.
-    private var modelSelection: Binding<String> {
+    /// One menu item's checkmark. Re-picking the selected model turns the
+    /// toggle off, which should leave the selection alone.
+    private func selectionOf(_ model: String) -> Binding<Bool> {
         Binding {
-            settings.openRouterModel
-        } set: { model in
-            guard model == Self.customModelTag else {
-                settings.openRouterModel = model
-                return
-            }
-            customModel = suggestedModels.contains(settings.openRouterModel)
-                ? ""
-                : settings.openRouterModel
-            isAddingCustomModel = true
+            settings.openRouterModel == model
+        } set: { isSelected in
+            if isSelected { settings.openRouterModel = model }
         }
+    }
+
+    private func isSuggested(_ model: String) -> Bool {
+        SuggestedModel.all.contains { $0.id == model }
+    }
+
+    // The sheet edits a custom model in place, so it starts from the current
+    // one unless that's a suggestion.
+    private func startAddingCustomModel() {
+        customModel = isSuggested(settings.openRouterModel) ? "" : settings.openRouterModel
+        isAddingCustomModel = true
     }
 
     private var trimmedCustomModel: String {
