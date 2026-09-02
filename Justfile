@@ -8,10 +8,11 @@ dev:
 
 # Build the shared yazar scheme with worktree-local build artifacts.
 build:
-    xcodebuild \
+    @xcodebuild -quiet \
         -project {{project}} \
         -scheme {{scheme}} \
         -configuration Debug \
         -destination 'platform=macOS' \
         -derivedDataPath {{derived_data}} \
         build
+    @echo "Built {{derived_data}}/Build/Products/Debug/yazar.app"
