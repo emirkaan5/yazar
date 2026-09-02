@@ -168,6 +168,24 @@ model nearly follows the shape it was given: snake_case keys, and a lone wrapper
 key. Where two readings of one reply both parse, the richer one wins, since a
 reply mixing conventions decodes under either and only one carries the lists.
 
+## "The data couldn't be read because it is missing"
+
+Swift's wording for a missing required key, reaching the user unchanged. The
+notes request came back HTTP 200 with something that was not a completion, so
+`ResponseBody.choices` was absent and the raw `DecodingError` was what got
+logged and shown.
+
+OpenRouter answers some upstream failures with 200 and an error object in place
+of the choices, which is the likely shape here — a free notes model failing or
+rate-limiting. So a body that will not decode as a reply is now decoded as an
+error first, and if it is neither, the error quotes the first 200 characters of
+what actually arrived. `OpenRouterTranscriber` had the same defect on its own
+response and got the same treatment.
+
+Worth noting for anyone reading the phase list: switching transcription to Apple
+Speech moves the audio on device, but notes are still OpenRouter, by design. The
+two halves fail independently and for different reasons.
+
 ## Things that cost time
 
 Worth knowing before they cost it again.

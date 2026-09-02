@@ -119,8 +119,27 @@ nonisolated struct OpenRouterTranscriber: Transcriber {
             )
         }
 
-        let responseBody = try JSONDecoder().decode(ResponseBody.self, from: data)
-        return responseBody.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        do {
+            let responseBody = try JSONDecoder().decode(ResponseBody.self, from: data)
+            return responseBody.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        } catch {
+            // A failure returned with HTTP 200, which happens, decodes as a
+            // missing key and would otherwise be reported as unreadable data.
+            if let failure = try? JSONDecoder().decode(ErrorResponse.self, from: data) {
+                throw OpenRouterTranscriberError.service(failure.error.message)
+            }
+            throw OpenRouterTranscriberError.unreadableResponse(Self.preview(of: data))
+        }
+    }
+
+    /// The start of a body that could not be read, so the error names what came
+    /// back rather than how the decoder felt about it.
+    private static func preview(of data: Data) -> String {
+        let text = String(decoding: data.prefix(2_000), as: UTF8.self)
+            .split(whereSeparator: \.isNewline)
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespaces)
+        return text.count > 200 ? text.prefix(200) + "…" : text
     }
 
     /// Whisper-style endpoints expect a bare ISO-639-1 code, but the language
@@ -166,6 +185,7 @@ private enum OpenRouterTranscriberError: LocalizedError {
     case missingAPIKey
     case invalidEndpoint
     case invalidResponse
+    case unreadableResponse(String)
     case timedOut
     case service(String)
 
@@ -174,6 +194,8 @@ private enum OpenRouterTranscriberError: LocalizedError {
         case .missingAPIKey: "Add your OpenRouter API key in Yazar Settings."
         case .invalidEndpoint: "The OpenRouter transcription endpoint is invalid."
         case .invalidResponse: "OpenRouter returned an invalid response."
+        case .unreadableResponse(let body):
+            "OpenRouter's reply was not in the expected shape. It sent: \(body)"
         case .timedOut: "OpenRouter transcription timed out."
         case .service(let message): message
         }

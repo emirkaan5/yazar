@@ -60,7 +60,20 @@ nonisolated struct OpenRouterClient: LanguageModelClient {
             throw OpenRouterClientError.service("OpenRouter returned HTTP \(httpResponse.statusCode).")
         }
 
-        let body = try JSONDecoder().decode(ResponseBody.self, from: data)
+        let body: ResponseBody
+        do {
+            body = try JSONDecoder().decode(ResponseBody.self, from: data)
+        } catch {
+            // OpenRouter answers some upstream failures with HTTP 200 and an
+            // error object where the choices should be. Decoding that as a reply
+            // fails on a missing key, and Swift's wording for it — "the data
+            // couldn't be read because it is missing" — describes the decoder's
+            // problem rather than the user's.
+            if let failure = try? JSONDecoder().decode(ErrorResponse.self, from: data) {
+                throw OpenRouterClientError.service(failure.error.detail)
+            }
+            throw OpenRouterClientError.unreadableResponse(Self.preview(of: data))
+        }
         guard let choice = body.choices.first else { throw OpenRouterClientError.emptyReply }
 
         // A reasoning model answers with `content` null more often than not-at-all:
@@ -86,6 +99,16 @@ nonisolated struct OpenRouterClient: LanguageModelClient {
             throw OpenRouterClientError.truncated
         }
         return content
+    }
+
+    /// The start of a body that could not be read, for an error the user sees.
+    /// Whatever went wrong, the reply itself is the shortest way to recognize it.
+    private static func preview(of data: Data) -> String {
+        let text = String(decoding: data.prefix(2_000), as: UTF8.self)
+            .split(whereSeparator: \.isNewline)
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespaces)
+        return text.count > 200 ? text.prefix(200) + "…" : text
     }
 
     private struct RequestBody: Encodable {
@@ -180,6 +203,7 @@ private enum OpenRouterClientError: LocalizedError {
     case invalidEndpoint
     case invalidResponse
     case emptyReply
+    case unreadableResponse(String)
     case truncated
     case reasoningOnly
     case refused(String)
@@ -192,6 +216,8 @@ private enum OpenRouterClientError: LocalizedError {
         case .invalidEndpoint: "The OpenRouter chat endpoint is invalid."
         case .invalidResponse: "OpenRouter returned an invalid response."
         case .emptyReply: "OpenRouter returned an empty reply."
+        case .unreadableResponse(let body):
+            "OpenRouter's reply was not in the expected shape. It sent: \(body)"
         case .truncated:
             "The model ran out of room before finishing the notes. Try a shorter transcript, or a model that reasons less."
         case .reasoningOnly:
