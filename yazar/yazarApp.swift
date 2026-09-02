@@ -28,7 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let settings: Settings
     private let permissions = Permissions()
     private let yazar: Yazar
-    private var selectedPage = AppPage.general
+    private var selectedPage = AppPage.dictation
     private var overlayPanel: OverlayPanel?
     private var appWindow: NSWindow?
 
@@ -60,7 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if isReadyToStart {
             startEngine()
         } else {
-            showApp(page: .permissions)
+            showApp(page: .systemAccess)
             permissions.startPolling()
             startEngineWhenReady()
         }
@@ -100,7 +100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 permissions: permissions,
                 yazar: yazar,
                 selection: Binding(
-                    get: { [weak self] in self?.selectedPage ?? .general },
+                    get: { [weak self] in self?.selectedPage ?? .dictation },
                     set: { [weak self] in self?.selectedPage = $0 }
                 )
             )
@@ -134,7 +134,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func startEngine() {
         permissions.stopPolling()
         if overlayPanel == nil {
-            overlayPanel = OverlayPanel(yazar: yazar)
+            overlayPanel = OverlayPanel(yazar: yazar, settings: settings)
         }
         do {
             try yazar.start()

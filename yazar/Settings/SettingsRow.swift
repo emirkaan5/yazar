@@ -27,6 +27,7 @@ struct SettingsSection<Content: View>: View {
                     .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

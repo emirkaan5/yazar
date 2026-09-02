@@ -9,89 +9,103 @@ struct DictationSettingsView: View {
     private var audioInputs: [AudioInput] { AudioInput.available }
 
     var body: some View {
-        SettingsSection("Recording") {
-            SettingsRow(
-                "Dictation key",
-                description: "Hold \(settings.dictationTrigger.displayName) to record."
-            ) {
-                Button("Change…") { isRecordingTrigger = true }
-                    .buttonStyle(.bordered)
-                    .sheet(isPresented: $isRecordingTrigger) {
-                        TriggerRecorderSheet(
-                            trigger: $settings.dictationTrigger,
-                            yazar: yazar
-                        )
-                    }
-            }
-
-            RowDivider()
-
-            SettingsRow(
-                "Audio input",
-                description: "Microphone used for dictation."
-            ) {
-                Picker("Audio input", selection: $settings.audioInputID) {
-                    if !settings.audioInputID.isEmpty,
-                       !audioInputs.contains(where: { $0.id == settings.audioInputID }) {
-                        Text("Unavailable device").tag(settings.audioInputID)
-                    }
-                    ForEach(audioInputs) { input in
-                        Text(input.name).tag(input.id)
-                    }
+        VStack(alignment: .leading, spacing: 20) {
+            SettingsSection("Activation") {
+                SettingsRow(
+                    "Dictation key",
+                    description: "Hold \(settings.dictationTrigger.displayName) to record."
+                ) {
+                    Button("Change…") { isRecordingTrigger = true }
+                        .buttonStyle(.bordered)
+                        .sheet(isPresented: $isRecordingTrigger) {
+                            TriggerRecorderSheet(
+                                trigger: $settings.dictationTrigger,
+                                yazar: yazar
+                            )
+                        }
                 }
-                .labelsHidden()
-                .frame(width: 220)
             }
 
-            RowDivider()
-
-            SettingsRow(
-                "Play sounds",
-                description: "Play feedback for recording and transcription status."
-            ) {
-                Toggle("Play sounds", isOn: $settings.playSounds)
+            SettingsSection("Audio") {
+                SettingsRow(
+                    "Audio input",
+                    description: "Microphone used for dictation."
+                ) {
+                    Picker("Audio input", selection: $settings.audioInputID) {
+                        if !settings.audioInputID.isEmpty,
+                           !audioInputs.contains(where: { $0.id == settings.audioInputID }) {
+                            Text("Unavailable device").tag(settings.audioInputID)
+                        }
+                        ForEach(audioInputs) { input in
+                            Text(input.name).tag(input.id)
+                        }
+                    }
                     .labelsHidden()
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
+                    .frame(width: 220)
+                }
             }
 
-            RowDivider()
-
-            SettingsRow(
-                "Sound theme",
-                description: "Sounds used for start, stop, cancellation, and transcription errors."
-            ) {
-                Picker("Sound theme", selection: $settings.soundTheme) {
-                    ForEach(SoundTheme.allCases) { theme in
-                        Text(theme.displayName).tag(theme)
-                    }
+            SettingsSection("Feedback") {
+                SettingsRow(
+                    "Show timer",
+                    description: "Show elapsed time while recording."
+                ) {
+                    Toggle("Show timer", isOn: $settings.showRecordingTimer)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
                 }
-                .labelsHidden()
-                .frame(width: 220, alignment: .trailing)
-                .disabled(!settings.playSounds)
+
+                RowDivider()
+
+                SettingsRow(
+                    "Play sounds",
+                    description: "Play feedback for recording and transcription status."
+                ) {
+                    Toggle("Play sounds", isOn: $settings.playSounds)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                }
+
+                RowDivider()
+
+                SettingsRow(
+                    "Sound theme",
+                    description: "Sounds used for start, stop, cancellation, and transcription errors."
+                ) {
+                    Picker("Sound theme", selection: $settings.soundTheme) {
+                        ForEach(SoundTheme.allCases) { theme in
+                            Text(theme.displayName).tag(theme)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 220, alignment: .trailing)
+                    .disabled(!settings.playSounds)
+                }
             }
 
 #if DEBUG
-            RowDivider()
+            SettingsSection("Development") {
+                SettingsRow(
+                    "Demo mode",
+                    description: "Use the microphone, wait five seconds, then paste sample text."
+                ) {
+                    Toggle("Demo mode", isOn: $settings.demoMode)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                }
 
-            SettingsRow(
-                "Demo mode",
-                description: "Use the microphone, wait five seconds, then paste sample text."
-            ) {
-                Toggle("Demo mode", isOn: $settings.demoMode)
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-            }
+                RowDivider()
 
-            RowDivider()
-
-            SettingsRow(
-                "Error mode",
-                description: "Show the error state used when transcription fails."
-            ) {
-                Button("Trigger error mode") { yazar.triggerDemoError() }
-                    .buttonStyle(.bordered)
+                SettingsRow(
+                    "Error mode",
+                    description: "Show the error state used when transcription fails."
+                ) {
+                    Button("Trigger error mode") { yazar.triggerDemoError() }
+                        .buttonStyle(.bordered)
+                }
             }
 #endif
         }

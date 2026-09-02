@@ -1,29 +1,5 @@
 import SwiftUI
 
-enum AppPage: CaseIterable, Identifiable {
-    case general
-    case dictation
-    case permissions
-
-    var id: Self { self }
-
-    var title: String {
-        switch self {
-        case .general: "General"
-        case .dictation: "Dictation"
-        case .permissions: "Permissions"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .general: "gearshape"
-        case .dictation: "waveform"
-        case .permissions: "lock.shield"
-        }
-    }
-}
-
 /// The settings window: a page list on the left, the selected page on the right.
 struct YazarView: View {
     static let minimumSize = CGSize(width: 680, height: 420)
@@ -38,7 +14,7 @@ struct YazarView: View {
         settings: Settings,
         permissions: Permissions,
         yazar: Yazar,
-        selection: Binding<AppPage> = .constant(.general)
+        selection: Binding<AppPage> = .constant(.dictation)
     ) {
         self.settings = settings
         self.permissions = permissions
@@ -54,19 +30,19 @@ struct YazarView: View {
             }
             .listStyle(.sidebar)
             .safeAreaPadding(.top, 30)
-            .frame(width: 140)
+            .frame(width: 160)
 
             Divider()
 
             ScrollView {
                 Group {
                     switch selection {
-                    case .general:
-                        GeneralSettingsView(settings: settings)
                     case .dictation:
                         DictationSettingsView(settings: settings, yazar: yazar)
-                    case .permissions:
-                        PermissionsSettingsView(
+                    case .transcription:
+                        TranscriptionSettingsView(settings: settings)
+                    case .systemAccess:
+                        SystemAccessSettingsView(
                             permissions: permissions,
                             settings: settings,
                             yazar: yazar

@@ -8,7 +8,7 @@ final class OverlayPanel {
     private let panel: NSPanel
     private var hideTask: Task<Void, Never>?
 
-    init(yazar: Yazar) {
+    init(yazar: Yazar, settings: Settings) {
         self.yazar = yazar
         panel = NSPanel(
             contentRect: NSRect(origin: .zero, size: OverlayView.panelSize),
@@ -25,7 +25,7 @@ final class OverlayPanel {
         panel.backgroundColor = .clear
         panel.hasShadow = true
         panel.ignoresMouseEvents = true
-        let hostingView = NSHostingView(rootView: OverlayView(yazar: yazar))
+        let hostingView = NSHostingView(rootView: OverlayView(yazar: yazar, settings: settings))
         hostingView.sizingOptions = []
         hostingView.autoresizingMask = [.width, .height]
         panel.contentView = hostingView

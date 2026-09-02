@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Which provider transcribes, what it needs to do so, and in what language.
-struct GeneralSettingsView: View {
+struct TranscriptionSettingsView: View {
     @Bindable var settings: Settings
     @State private var speechModel = AppleSpeechModel()
     @State private var customModel = ""
@@ -9,94 +9,99 @@ struct GeneralSettingsView: View {
     @FocusState private var customModelFocused: Bool
 
     var body: some View {
-        SettingsSection("Transcription") {
-            SettingsRow("Provider", description: settings.transcriptionProvider.summary) {
-                Picker("Provider", selection: $settings.transcriptionProvider) {
-                    ForEach(TranscriptionProvider.allCases) { provider in
-                        Text(provider.displayName).tag(provider)
+        VStack(alignment: .leading, spacing: 20) {
+            SettingsSection("Provider") {
+                SettingsRow("Provider", description: settings.transcriptionProvider.summary) {
+                    Picker("Provider", selection: $settings.transcriptionProvider) {
+                        ForEach(TranscriptionProvider.allCases) { provider in
+                            Text(provider.displayName).tag(provider)
+                        }
                     }
-                }
-                .labelsHidden()
-                .frame(width: 220, alignment: .trailing)
-            }
-
-            if settings.transcriptionProvider.needsAPIKey {
-                RowDivider()
-
-                SettingsRow(
-                    "API key",
-                    description: "Stored securely in your Mac's Keychain."
-                ) {
-                    SecureField("Required", text: $settings.selectedAPIKey)
-                        .textFieldStyle(.roundedBorder)
-                        .textContentType(.password)
-                        .frame(width: 220)
+                    .labelsHidden()
+                    .frame(width: 220, alignment: .trailing)
                 }
 
-                if let error = settings.apiKeyError {
+                if settings.transcriptionProvider == .openRouter {
                     RowDivider()
-                    Label(error, systemImage: "exclamationmark.triangle.fill")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.red)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                }
-            }
 
-            if settings.transcriptionProvider == .openRouter {
-                RowDivider()
-
-                SettingsRow(
-                    "Model",
-                    description: "OpenRouter model used to transcribe recordings."
-                ) {
-                    // A Menu rather than a Picker: menu items only carry a
-                    // description when their label is two Text views, which a
-                    // Picker's tagged items can't be. Toggles draw the
-                    // checkmark the pop-up drew for free.
-                    Menu {
-                        Section("Suggested Models") {
-                            ForEach(SuggestedModel.all) { model in
-                                Toggle(isOn: selectionOf(model.id)) {
-                                    Text(model.id)
-                                    Text(model.summary)
+                    SettingsRow(
+                        "Model",
+                        description: "OpenRouter model used to transcribe recordings."
+                    ) {
+                        // A Menu rather than a Picker: menu items only carry a
+                        // description when their label is two Text views, which a
+                        // Picker's tagged items can't be. Toggles draw the
+                        // checkmark the pop-up drew for free.
+                        Menu {
+                            Section("Suggested Models") {
+                                ForEach(SuggestedModel.all) { model in
+                                    Toggle(isOn: selectionOf(model.id)) {
+                                        Text(model.id)
+                                        Text(model.summary)
+                                    }
                                 }
                             }
-                        }
 
-                        if !isSuggested(settings.openRouterModel) {
-                            Section("Custom Model") {
-                                Toggle(isOn: selectionOf(settings.openRouterModel)) {
-                                    Text(settings.openRouterModel)
+                            if !isSuggested(settings.openRouterModel) {
+                                Section("Custom Model") {
+                                    Toggle(isOn: selectionOf(settings.openRouterModel)) {
+                                        Text(settings.openRouterModel)
+                                    }
                                 }
                             }
-                        }
 
-                        Button("Add a Custom Model…") { startAddingCustomModel() }
-                    } label: {
-                        Text(settings.openRouterModel)
+                            Button("Add a Custom Model…") { startAddingCustomModel() }
+                        } label: {
+                            Text(settings.openRouterModel)
+                        }
+                        .frame(width: 220)
+                        .sheet(isPresented: $isAddingCustomModel) { customModelSheet }
                     }
-                    .frame(width: 220)
-                    .sheet(isPresented: $isAddingCustomModel) { customModelSheet }
+                }
+
+                if settings.transcriptionProvider.needsAPIKey {
+                    RowDivider()
+
+                    SettingsRow(
+                        "API key",
+                        description: "Stored securely in your Mac's Keychain."
+                    ) {
+                        SecureField("Required", text: $settings.selectedAPIKey)
+                            .textFieldStyle(.roundedBorder)
+                            .textContentType(.password)
+                            .frame(width: 220)
+                    }
+
+                    if let error = settings.apiKeyError {
+                        RowDivider()
+                        Label(error, systemImage: "exclamationmark.triangle.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.red)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                    }
                 }
             }
 
-            RowDivider()
-
-            SettingsRow(
-                "Language",
-                description: settings.transcriptionProvider.languageHint
-            ) {
-                TextField(settings.transcriptionProvider.languagePlaceholder, text: $settings.language)
+            SettingsSection("Language") {
+                SettingsRow(
+                    "Language",
+                    description: settings.transcriptionProvider.languageHint
+                ) {
+                    TextField(
+                        settings.transcriptionProvider.languagePlaceholder,
+                        text: $settings.language
+                    )
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 220)
-            }
+                }
 
-            if settings.transcriptionProvider == .appleSpeech {
-                RowDivider()
+                if settings.transcriptionProvider == .appleSpeech {
+                    RowDivider()
 
-                SettingsRow("Language model", description: speechModelDescription) {
-                    speechModelControl
+                    SettingsRow("Apple Speech model", description: speechModelDescription) {
+                        speechModelControl
+                    }
                 }
             }
         }
