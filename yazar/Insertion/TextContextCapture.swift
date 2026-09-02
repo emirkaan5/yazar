@@ -2,75 +2,49 @@ import AppKit
 import ApplicationServices
 import Foundation
 
-/// Captures the target text surrounding the selection while dictation is active.
+/// Captures the target text surrounding the selection at dictation stop.
 ///
-/// It owns only session timing: when to look, which application to watch, and
-/// which snapshot survives. `TextContextSearch` owns how to read a textbox.
-/// Unsupported Accessibility representations degrade to nil instead of blocking
-/// paste.
+/// It owns only session timing: opting the target application's accessibility
+/// tree in when dictation starts, and reading the focused textbox when it ends.
+/// `TextContextSearch` owns how to read a textbox. Unsupported Accessibility
+/// representations degrade to nil instead of blocking paste.
 @MainActor
-final class TextContextCapture: NSObject {
+final class TextContextCapture {
     private static let manualAccessibilityAttribute = "AXManualAccessibility"
     private static let enhancedUserInterfaceAttribute = "AXEnhancedUserInterface"
 
     private let systemWideElement = AXUIElementCreateSystemWide()
-    private var latestContext: TextInsertionContext?
     private var isCapturing = false
-    private var observer: AXObserver?
-    private var observedApplication: AXUIElement?
-    private var observedProcessID: pid_t?
     private var accessibilityEnabledProcessIDs: Set<pid_t> = []
 
-    /// Starts a fresh session and captures the currently focused target.
+    /// Starts a session. Only the opt-in happens here: Chromium and Electron
+    /// build their trees in response to it, so asking at dictation start gives
+    /// them the hold duration to answer rather than one runloop turn.
     func begin() {
         cancel()
         isCapturing = true
-        NSWorkspace.shared.notificationCenter.addObserver(
-            self,
-            selector: #selector(activeApplicationChanged),
-            name: NSWorkspace.didActivateApplicationNotification,
-            object: nil
-        )
-        refresh()
-        observeApplication(processID: focusedProcessID() ?? frontmostProcessID)
+        if let processID = frontmostProcessID {
+            enableAccessibilityTree(for: processID)
+        }
     }
 
-    /// Refreshes at dictation stop and returns that newest result.
+    /// Captures the focused target at recording stop. Only this snapshot
+    /// reaches the fitter; focus during the hold does not matter, because the
+    /// text Yazar formats against is the text it is about to paste into.
     func finish() -> TextInsertionContext? {
         guard isCapturing else { return nil }
-        refresh()
-        let context = latestContext
-        endSession()
-        return context
+        defer { endSession() }
+        return captureContext()
     }
 
-    /// Ends an abandoned session without preserving its context.
+    /// Ends an abandoned session.
     func cancel() {
         endSession()
     }
 
     private func endSession() {
-        stopObserving()
         accessibilityEnabledProcessIDs.removeAll()
-        latestContext = nil
         isCapturing = false
-    }
-
-    @objc private func activeApplicationChanged(_ notification: Notification) {
-        guard isCapturing else { return }
-        refresh()
-        let processID = (notification.userInfo?[NSWorkspace.applicationUserInfoKey]
-            as? NSRunningApplication)?.processIdentifier
-        observeApplication(processID: processID ?? focusedProcessID() ?? frontmostProcessID)
-    }
-
-    fileprivate func focusedElementChanged() {
-        guard isCapturing else { return }
-        refresh()
-    }
-
-    private func refresh() {
-        latestContext = captureContext()
     }
 
     private func captureContext() -> TextInsertionContext? {
@@ -137,79 +111,5 @@ final class TextContextCapture: NSObject {
 
     private var frontmostProcessID: pid_t? {
         NSWorkspace.shared.frontmostApplication?.processIdentifier
-    }
-
-    private func focusedProcessID() -> pid_t? {
-        systemWideElement.element(kAXFocusedUIElementAttribute)?.processID
-    }
-
-    private func observeApplication(processID: pid_t?) {
-        guard observedProcessID != processID else { return }
-        stopAXObservation()
-        guard let processID else { return }
-
-        let application = AXUIElementCreateApplication(processID)
-        var observer: AXObserver?
-        guard AXObserverCreate(
-            processID,
-            textContextFocusChangedCallback,
-            &observer
-        ) == .success,
-              let observer,
-              AXObserverAddNotification(
-                observer,
-                application,
-                kAXFocusedUIElementChangedNotification as CFString,
-                Unmanaged.passUnretained(self).toOpaque()
-              ) == .success else { return }
-
-        CFRunLoopAddSource(
-            CFRunLoopGetMain(),
-            AXObserverGetRunLoopSource(observer),
-            .commonModes
-        )
-        self.observer = observer
-        observedApplication = application
-        observedProcessID = processID
-    }
-
-    private func stopObserving() {
-        NSWorkspace.shared.notificationCenter.removeObserver(
-            self,
-            name: NSWorkspace.didActivateApplicationNotification,
-            object: nil
-        )
-        stopAXObservation()
-    }
-
-    private func stopAXObservation() {
-        if let observer, let observedApplication {
-            AXObserverRemoveNotification(
-                observer,
-                observedApplication,
-                kAXFocusedUIElementChangedNotification as CFString
-            )
-            CFRunLoopRemoveSource(
-                CFRunLoopGetMain(),
-                AXObserverGetRunLoopSource(observer),
-                .commonModes
-            )
-        }
-        observer = nil
-        observedApplication = nil
-        observedProcessID = nil
-    }
-}
-
-private nonisolated func textContextFocusChangedCallback(
-    observer: AXObserver,
-    element: AXUIElement,
-    notification: CFString,
-    userInfo: UnsafeMutableRawPointer?
-) {
-    guard let userInfo else { return }
-    let capture = Unmanaged<TextContextCapture>.fromOpaque(userInfo).takeUnretainedValue()
-    MainActor.assumeIsolated {
-        capture.focusedElementChanged()
     }
 }

@@ -31,8 +31,8 @@ paste. `Inserter` remains responsible only for writing the clipboard and posting
 
 The implementation separates these kinds of knowledge:
 
-- `TextContextCapture` owns the stateful AX session: start/stop capture timing, focus
-  observation, application activation, and the Apple Notes line-boundary correction.
+- `TextContextCapture` owns the AX session: application opt-in at dictation start, the
+  single capture at dictation stop, and the Apple Notes line-boundary correction.
 - `TextContextSearch` owns one traversal: AX tree walking, incompatible text
   representations, and the pairing of contents with a selection.
 - `AXElement` owns typed, failure-tolerant reads over the C Accessibility API and
@@ -174,18 +174,23 @@ The current implementation applies these constraints in order:
 
 ## Capture timing
 
-`TextContextCapture.begin()` refreshes at dictation start and begins observing:
+`TextContextCapture.begin()` opts the frontmost application's AX tree into
+`AXManualAccessibility` and `AXEnhancedUserInterface`. It captures nothing. Chromium and
+Electron build their trees in response to that write, so asking at dictation start gives
+them the hold duration to answer instead of a single runloop turn.
 
-- `kAXFocusedUIElementChangedNotification` in the active application.
-- `NSWorkspace.didActivateApplicationNotification` when the user switches applications.
+`finish()` performs the one capture, at recording stop, and ends the session. `Yazar` then
+carries it as a local immutable value into the transcription task, so focus changes during
+the slower transcription phase cannot redirect formatting.
 
-Each focus or application change replaces the latest snapshot. `finish()` performs one last
-refresh at recording stop, tears down observers, and returns that newest context. `Yazar`
-then captures it as a local immutable value in the transcription task, so focus changes
-during the slower transcription phase cannot redirect formatting.
+An earlier version also observed `kAXFocusedUIElementChangedNotification` and
+`NSWorkspace.didActivateApplicationNotification`, refreshing a stored snapshot on each. That
+machinery could not affect the result: `finish()` refreshed unconditionally before
+returning, so every intermediate snapshot was overwritten unread. It was removed along with
+the `AXObserver`, its runloop source, its C callback, and the stored context. Only the
+stop-time snapshot describes the textbox Yazar is about to paste into.
 
-Cancellation and failure paths tear down capture. Notification registration failure does
-not prevent the required start-time and stop-time refreshes.
+Cancellation and failure paths end the session without capturing.
 
 ## Real-application verification performed
 
@@ -240,7 +245,7 @@ Read the feature as one unit of intent:
 2. `docs/plans/context-aware-insertion-simplification.md` — what later moved, and why.
 3. `yazar/Insertion/TextContextSearch.swift` — the corrected traversal and representation
    ordering.
-4. `yazar/Insertion/TextContextCapture.swift` — AX session timing and observation.
+4. `yazar/Insertion/TextContextCapture.swift` — AX session timing and application opt-in.
 5. `yazar/Insertion/AXElement.swift` — typed reads over the C Accessibility API.
 6. `yazar/Insertion/TextInsertionContext.swift` — canonical value and UTF-16 boundary.
 7. `yazar/Insertion/TranscriptFitter.swift` — pure local rules.
@@ -257,8 +262,8 @@ The highest-value review questions are:
 - Does marker-to-index conversion always use the same contents coordinate space passed to
   `TextInsertionContext`?
 - Can an empty or stale AX representation hide a later valid candidate?
-- Do focus changes, application changes, finish, cancellation, and failure each leave one
-  clear latest-context owner and tear down observers exactly once?
+- Do finish, cancellation, and failure each end the session exactly once and leave the
+  object reusable for the next dictation?
 - Does every capture failure preserve the original transcript and still reach
   `Inserter.insert`?
 - Do `NSString` and `NSRange` remain the only consumers of AX offsets?

@@ -375,6 +375,37 @@ now uses a regex literal, which the compiler validates and which drops the
 `try?` and its `guard`. It builds the regex per call, which happens once per
 dictation.
 
+## Follow-up: focus observation removed
+
+A later review asked why `TextContextCapture` observed focus at all. It does not
+need to. `refresh()` assigned `latestContext` unconditionally, and `finish()`
+called `refresh()` before returning, so every snapshot the observer produced was
+overwritten unread. The observation could only ever change the result by
+*discarding* a good early snapshot when the stop-time read failed.
+
+Removed: `AXObserver`, its runloop source, the `nonisolated` C callback and its
+`MainActor.assumeIsolated` re-entry, `NSWorkspace.didActivateApplicationNotification`,
+`observeApplication`/`stopObserving`/`stopAXObservation`, `focusedProcessID`, the
+`latestContext` store, and the `NSObject` base class the `@objc` selector
+required. `TextContextCapture` went from 215 lines to 115.
+
+`begin()` was kept, against the reviewer's proposal of a single stateless
+`capture()` at stop. It no longer captures, but it still calls
+`enableAccessibilityTree` for the frontmost process. Chromium and Electron build
+their trees in response to that write; setting it at dictation start gives them
+the hold duration to answer, where a stateless stop-time capture would set the
+attribute and read the focused element in the same runloop turn. The existing
+re-read at `captureContext` covers a synchronous tree only. Six lines is cheap
+insurance for the ecosystem this feature exists for.
+
+The same review proposed replacing `TextContextSearch` with a three-step direct
+probe. That was declined: it reads `AXSelectedTextMarkerRange` with no role
+gate, which restores the Legcord bug where a focused checkbox's inherited
+document marker becomes textbox context; it looks for the marker only on the
+focused element, missing the marker-on-a-child case that Safari
+`contenteditable` produces; and it drops the selected-text agreement check that
+catches a marker index converted in the wrong element's coordinate space.
+
 ### Still outstanding
 
 Steps 4 and 5 changed what Yazar asks a target for. The manual matrix in

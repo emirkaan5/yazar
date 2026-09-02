@@ -17,7 +17,7 @@ Add local transcript fitting that reads the target's current text and selection 
 - The project has no local formatter, AX text reader, proper-noun sources, or test target today.
 - The roadmap puts generic local formatting before app-specific formatting. Generic rules therefore need one pure home that later app-specific policy can call or neighbor without changing AX capture or paste delivery.
 - AX ranges use UTF-16 offsets. Only `NSString`/`NSRange` may split AX-provided contents; Swift `String.Index` must never consume those offsets.
-- The target uses Main Actor default isolation. AX observation and lifecycle state stay on the main actor; the pure value and formatter types opt out with `nonisolated` where needed.
+- The target uses Main Actor default isolation. AX reads and lifecycle state stay on the main actor; the pure value and formatter types opt out with `nonisolated` where needed.
 
 ## Design comparison
 
@@ -59,20 +59,21 @@ The initializer rejects negative, overflowing, or out-of-bounds ranges. It perfo
 
 ### `TextContextCapture`
 
-A main-actor session object that owns session timing: when to look, which application to watch, which snapshot survives, and the Apple Notes correction. It owns no formatting policy. Reading a textbox is `TextContextSearch`; reading one AX attribute is `AXElement`.
+A main-actor session object that owns session timing: when to opt a target application in, when to look, and the Apple Notes correction. It owns no formatting policy. Reading a textbox is `TextContextSearch`; reading one AX attribute is `AXElement`.
 
 ```swift
 @MainActor
 final class TextContextCapture {
-    /// Starts a new session, immediately replacing any prior snapshot with the
-    /// focused target's current context and watching focus until `finish()`.
+    /// Starts a session and opts the frontmost application's accessibility
+    /// tree in, giving a dormant Chromium or Electron tree the whole hold
+    /// duration to appear rather than one runloop turn.
     func begin()
 
-    /// Refreshes once at dictation stop, tears down observation, and returns the
-    /// newest result. AX failure returns nil and never prevents delivery.
+    /// Captures the focused target at dictation stop and ends the session.
+    /// AX failure returns nil and never prevents delivery.
     func finish() -> TextInsertionContext?
 
-    /// Tears down observation and discards context for an abandoned dictation.
+    /// Ends an abandoned session.
     func cancel()
 }
 ```
@@ -91,7 +92,7 @@ The capture session performs these operations behind that interface:
 6. Apply the Apple Notes correction inside capture, where the AX ambiguity belongs: for bundle ID `com.apple.notes`, an empty selection, nonempty `afterText`, and `beforeText` ending in `\n`, move that newline to the start of `afterText`.
 7. Treat unsupported attributes, invalid types or ranges, traversal exhaustion, and permission loss as nil. Do not consult AX editability before returning context and do not block `Inserter`.
 
-Focus tracking follows AX's real process boundary. The session observes `kAXFocusedUIElementChangedNotification` on the current application's AX root, and watches `NSWorkspace.didActivateApplicationNotification` to replace that per-process observer when the active app changes. Both events refresh the snapshot. The AX run-loop source runs on the main run loop, so its C callback re-enters the already-isolated object with `MainActor.assumeIsolated`; it does not introduce GCD. A target that does not support notifications still gets the mandatory start and stop captures.
+The session does not track focus while dictation runs. Only the stop-time snapshot can be right: it describes the textbox Yazar is about to paste into, and any earlier one describes a textbox it is not. `begin()` therefore performs no capture at all, and exists only to opt the frontmost application's AX tree in early.
 
 ### `TranscriptFitter`
 
@@ -141,7 +142,7 @@ transcriptionTask = Task { [weak self] in
 
 The stop-time context travels as a local immutable value in the transcription task. `Yazar` does not keep a second synchronized snapshot property, and later focus changes during transcription cannot redirect formatting.
 
-`cancel()`, `fail(_:)`, and `stop()` call `textContextCapture.cancel()` for every path that abandons a capture. The no-speech path finishes capture first so it removes observers, then discards the returned context.
+`cancel()`, `fail(_:)`, and `stop()` call `textContextCapture.cancel()` for every path that abandons a capture. The no-speech path finishes capture first, then discards the returned context.
 
 Delivery chooses formatting only when context exists:
 
@@ -163,7 +164,7 @@ Yazar receives only a `String` from both transcribers and owns no proper-noun vo
 
 - Move `yazar/Dictation/Inserter.swift` to `yazar/Insertion/Inserter.swift` so all insertion behavior has one feature home; its contents and public behavior stay unchanged.
 - Add `yazar/Insertion/TextInsertionContext.swift` for the canonical value and UTF-16-safe construction.
-- Add `yazar/Insertion/TextContextCapture.swift` for session timing, focus observation, application opt-in, and the Notes correction.
+- Add `yazar/Insertion/TextContextCapture.swift` for session timing, application opt-in, and the Notes correction.
 - Add `yazar/Insertion/TextContextSearch.swift` for the bounded traversal and representation pairing of one capture.
 - Add `yazar/Insertion/AXElement.swift` for typed, failure-tolerant reads over the C Accessibility API.
 - Add `yazar/Insertion/TranscriptFitter.swift` for the pure ordered ruleset.
