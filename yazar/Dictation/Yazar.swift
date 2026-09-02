@@ -10,7 +10,6 @@ final class Yazar {
         case recording
         case transcribing
         case noSpeech
-        case copied
         case error(DictationFailure)
     }
 
@@ -21,7 +20,7 @@ final class Yazar {
             switch state {
             case .warmingUp, .recording, .transcribing:
                 escapeHotKey.capture(true)
-            case .idle, .noSpeech, .copied, .error:
+            case .idle, .noSpeech, .error:
                 escapeHotKey.capture(false)
             }
         }
@@ -38,6 +37,7 @@ final class Yazar {
     private let escapeHotKey = EscapeHotKey()
     private let recorder = Recorder()
     private let soundPlayer = StatusSoundPlayer()
+    private let textContextCapture = TextContextCapture()
     /// Set while the settings screen is recording a new trigger, so pressing keys
     /// to choose one does not start a dictation.
     var ignoresTrigger = false
@@ -64,6 +64,7 @@ final class Yazar {
         transcriptionTask?.cancel()
         stateResetTask?.cancel()
         recorderPollingTask?.cancel()
+        textContextCapture.cancel()
         recorder.shutDown()
     }
 
@@ -95,7 +96,7 @@ final class Yazar {
         switch state {
         case .idle:
             break
-        case .noSpeech, .copied, .error:
+        case .noSpeech, .error:
             stateResetTask?.cancel()
         case .warmingUp, .recording, .transcribing:
             return
@@ -105,6 +106,7 @@ final class Yazar {
         level = 0
         state = .warmingUp
         play(.start)
+        textContextCapture.begin()
         do {
             try recorder.start(inputID: settings.audioInputID)
             startPollingRecorder()
@@ -117,7 +119,7 @@ final class Yazar {
         switch state {
         case .warmingUp, .recording:
             break
-        case .idle, .transcribing, .noSpeech, .copied, .error:
+        case .idle, .transcribing, .noSpeech, .error:
             return
         }
 
@@ -165,6 +167,7 @@ final class Yazar {
     private func finishRecording() {
         recorderPollingTask?.cancel()
         let recording = recorder.stop()
+        let insertionContext = textContextCapture.finish()
         let demoMode = isDemoMode
         play(.stop)
         recordingStartedAt = nil
@@ -193,7 +196,7 @@ final class Yazar {
                 text = try await transcriber.transcribe(recording, language: language)
 #endif
                 try Task.checkCancellation()
-                self?.deliver(text)
+                self?.deliver(text, context: insertionContext)
             } catch is CancellationError {
                 return
             } catch {
@@ -207,6 +210,7 @@ final class Yazar {
     /// Escape drops whatever is in flight. Only reachable while a dictation is
     /// running, since that is the only time the hot key is registered.
     private func cancel() {
+        textContextCapture.cancel()
         switch state {
         case .warmingUp, .recording:
             recorderPollingTask?.cancel()
@@ -219,12 +223,13 @@ final class Yazar {
             transcriptionTask = nil
             play(.cancel)
             state = .idle
-        case .idle, .noSpeech, .copied, .error:
+        case .idle, .noSpeech, .error:
             return
         }
     }
 
     private func fail(_ failure: DictationFailure) {
+        textContextCapture.cancel()
         recorderPollingTask?.cancel()
         recorder.cancel()
         transcriptionTask?.cancel()
@@ -232,22 +237,18 @@ final class Yazar {
         resetState(after: .seconds(2.5))
     }
 
-    /// Attempt to paste into the focused application when event-posting permission
-    /// allows it. When the target cannot be identified as editable, keep the
-    /// transcription on the clipboard and say so even though the shortcut was
-    /// attempted. A provider that recognized nothing lands in the same place as
-    /// audio that never cleared the speech gate.
-    private func deliver(_ text: String) {
+    /// Keep every transcription on the clipboard and attempt to paste it into the
+    /// focused application. A provider that recognized nothing lands in the same
+    /// place as audio that never cleared the speech gate.
+    private func deliver(_ text: String, context: TextInsertionContext?) {
         guard !text.isEmpty else {
             showNoSpeech()
             return
         }
-        switch Inserter.insert(text, restoringClipboard: settings.restoreClipboard) {
-        case .pasteAttempted:
+        let textToPaste = context.map { TranscriptFitter.fit(text, to: $0) } ?? text
+        switch Inserter.insert(textToPaste) {
+        case .delivered:
             state = .idle
-        case .copied:
-            state = .copied
-            resetState(after: .seconds(1.6))
         case .clipboardUnavailable:
             play(.error)
             fail(.clipboardUnavailable)

@@ -13,7 +13,6 @@ final class Settings {
         static let soundTheme = "soundTheme"
         static let audioInputID = "audioInputID"
         static let dictationTrigger = "dictationTrigger"
-        static let restoreClipboard = "restoreClipboard"
 #if DEBUG
         static let demoMode = "demoMode"
 #endif
@@ -52,10 +51,6 @@ final class Settings {
 
     var dictationTrigger: DictationTrigger {
         didSet { defaults.set(dictationTrigger.rawValue, forKey: Key.dictationTrigger) }
-    }
-
-    var restoreClipboard: Bool {
-        didSet { defaults.set(restoreClipboard, forKey: Key.restoreClipboard) }
     }
 
 #if DEBUG
@@ -113,9 +108,6 @@ final class Settings {
         dictationTrigger = defaults.string(forKey: Key.dictationTrigger)
             .flatMap(DictationTrigger.init(rawValue:))
             ?? .default
-        restoreClipboard = defaults.object(forKey: Key.restoreClipboard) == nil
-            ? true
-            : defaults.bool(forKey: Key.restoreClipboard)
 #if DEBUG
         demoMode = defaults.bool(forKey: Key.demoMode)
 #endif

@@ -42,7 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     var menuBarIcon: String {
         switch yazar.state {
-        case .idle, .noSpeech, .copied: "waveform"
+        case .idle, .noSpeech: "waveform"
         case .warmingUp, .recording: "waveform.circle.fill"
         case .transcribing: "ellipsis.circle"
         case .error: "exclamationmark.circle"
