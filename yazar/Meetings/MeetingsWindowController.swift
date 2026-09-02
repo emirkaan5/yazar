@@ -11,12 +11,19 @@ final class MeetingsWindowController: NSObject, NSWindowDelegate {
     private let store: MeetingStore
     private let session: MeetingSession
     private let notesMaker: MeetingNotesMaker
+    private let transcriptMaker: MeetingTranscriptMaker
     private var window: NSWindow?
 
-    init(store: MeetingStore, session: MeetingSession, notesMaker: MeetingNotesMaker) {
+    init(
+        store: MeetingStore,
+        session: MeetingSession,
+        notesMaker: MeetingNotesMaker,
+        transcriptMaker: MeetingTranscriptMaker
+    ) {
         self.store = store
         self.session = session
         self.notesMaker = notesMaker
+        self.transcriptMaker = transcriptMaker
     }
 
     func show() {
@@ -37,7 +44,12 @@ final class MeetingsWindowController: NSObject, NSWindowDelegate {
         window.contentMinSize = NSSize(width: 720, height: 420)
         window.center()
 
-        let hostingView = NSHostingView(rootView: MeetingsView(store: store, session: session, notesMaker: notesMaker))
+        let hostingView = NSHostingView(rootView: MeetingsView(
+            store: store,
+            session: session,
+            notesMaker: notesMaker,
+            transcriptMaker: transcriptMaker
+        ))
         hostingView.autoresizingMask = [.width, .height]
         window.contentView = hostingView
         window.delegate = self

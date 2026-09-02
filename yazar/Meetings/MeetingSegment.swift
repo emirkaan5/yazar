@@ -21,19 +21,30 @@ nonisolated struct MeetingSegment: Codable, Hashable, Identifiable, Sendable {
     /// on the meeting so the seams stay visible: the gap markers are derived from
     /// the segment boundaries, and a merged string has nowhere to put them.
     var transcript: String
+    /// Where this run's audio begins in the meeting's file, and where it ends.
+    /// The file is one contiguous append across resumes, so without these bounds
+    /// there is no way to transcribe a single segment of it afterwards. Nil on
+    /// segments recorded before they were tracked, and `audioEnd` is nil on one
+    /// the process died holding.
+    var audioStart: Int?
+    var audioEnd: Int?
 
     init(
         id: UUID = UUID(),
         startedAt: Date,
         endedAt: Date? = nil,
         endReason: EndReason? = nil,
-        transcript: String = ""
+        transcript: String = "",
+        audioStart: Int? = nil,
+        audioEnd: Int? = nil
     ) {
         self.id = id
         self.startedAt = startedAt
         self.endedAt = endedAt
         self.endReason = endReason
         self.transcript = transcript
+        self.audioStart = audioStart
+        self.audioEnd = audioEnd
     }
 
     /// Written by hand so that segments recorded before transcription existed
@@ -45,6 +56,8 @@ nonisolated struct MeetingSegment: Codable, Hashable, Identifiable, Sendable {
         endedAt = try container.decodeIfPresent(Date.self, forKey: .endedAt)
         endReason = try container.decodeIfPresent(EndReason.self, forKey: .endReason)
         transcript = try container.decodeIfPresent(String.self, forKey: .transcript) ?? ""
+        audioStart = try container.decodeIfPresent(Int.self, forKey: .audioStart)
+        audioEnd = try container.decodeIfPresent(Int.self, forKey: .audioEnd)
     }
 
     /// An open segment is one nothing has closed yet, which after a launch scan

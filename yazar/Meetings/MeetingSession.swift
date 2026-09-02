@@ -108,12 +108,17 @@ final class MeetingSession {
             segments: []
         )
         subject.state = .recording
-        subject.segments.append(MeetingSegment(startedAt: Date()))
+        subject.transcriptionFailure = nil
 
         let (audio, continuation) = AsyncStream.makeStream(of: Data.self)
         do {
             let file = try MeetingAudioFile(url: try store.audioURL(for: subject))
             audioFile = file
+            // The file already holds every earlier segment, so where it ends is
+            // where this one starts.
+            subject.segments.append(
+                MeetingSegment(startedAt: Date(), audioStart: Int(file.byteCount))
+            )
             audioContinuation = continuation
             recorder.onSamples = { samples in continuation.yield(samples) }
             // Written before capture starts so a crash during startup still
@@ -184,6 +189,9 @@ final class MeetingSession {
             } catch is CancellationError {
                 // Falls through: the audio stream still needs closing.
             } catch {
+                // Logged as well as shown. A meeting is long, and the window
+                // that displays this may not have been open when it happened.
+                NSLog("Yazar could not transcribe a meeting: %@", error.localizedDescription)
                 self?.transcriptionFailure = error.localizedDescription
             }
             // Nothing is reading the audio stream once this returns, and the
@@ -211,6 +219,8 @@ final class MeetingSession {
         tickTask?.cancel()
         tickTask = nil
         stopObservingSleep()
+        // Read before closing: this is where the segment's audio ends.
+        let endOffset = audioFile.map { Int($0.byteCount) }
         audioFile?.close()
         audioFile = nil
         stopFeedingTranscriber()
@@ -220,7 +230,7 @@ final class MeetingSession {
             state = failure.map(State.failed) ?? .idle
             return
         }
-        closeSegment(of: id, reason: reason)
+        closeSegment(of: id, reason: reason, endOffset: endOffset)
         state = .transcribing
         finalizeTask = Task { [weak self] in
             await self?.awaitTranscription()
@@ -253,6 +263,9 @@ final class MeetingSession {
         // meeting that vanished underneath cannot leave meeting mode stuck.
         if var meeting = store.meetings.first(where: { $0.id == id }) {
             writeTranscript(into: &meeting)
+            // Kept with the meeting so the library can say why it has no text,
+            // and offer to transcribe the audio again.
+            meeting.transcriptionFailure = transcriptionFailure
             // Paused rather than complete: nothing has made notes from this yet,
             // and a stopped meeting is resumable by design.
             meeting.state = reason == .interrupted ? .interrupted : .paused
@@ -266,11 +279,12 @@ final class MeetingSession {
         state = failure.map(State.failed) ?? .idle
     }
 
-    private func closeSegment(of id: UUID, reason: MeetingSegment.EndReason) {
+    private func closeSegment(of id: UUID, reason: MeetingSegment.EndReason, endOffset: Int?) {
         guard var meeting = store.meetings.first(where: { $0.id == id }) else { return }
         if let index = meeting.segments.indices.last, meeting.segments[index].isOpen {
             meeting.segments[index].endedAt = Date()
             meeting.segments[index].endReason = reason
+            meeting.segments[index].audioEnd = endOffset
         }
         writeTranscript(into: &meeting)
         meeting.state = .transcribing

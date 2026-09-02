@@ -8,6 +8,7 @@ struct MeetingDetailView: View {
     @Bindable var store: MeetingStore
     let session: MeetingSession
     let notesMaker: MeetingNotesMaker
+    let transcriptMaker: MeetingTranscriptMaker
     @State private var showsTranscript = false
     @State private var confirmsDelete = false
 
@@ -86,35 +87,65 @@ struct MeetingDetailView: View {
         }
     }
 
-    /// A meeting with a transcript and no notes. Notes are made automatically
-    /// when a recording stops, so reaching here means the attempt failed, the app
-    /// quit before it finished, or the transcript arrived some other way.
+    /// A meeting without notes, which is a meeting that stopped somewhere along
+    /// the way from audio to text to notes. Both steps run on their own when a
+    /// recording ends, so this says which one did not finish and offers it again.
     @ViewBuilder
     private var pendingNotes: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if notesMaker.isWorking(on: meeting.id) {
-                HStack(spacing: 6) {
-                    ProgressView().controlSize(.small)
-                    Text("Making notes…")
+            if transcriptMaker.isWorking(on: meeting.id) {
+                working("Transcribing…")
+            } else if notesMaker.isWorking(on: meeting.id) {
+                working("Making notes…")
+            } else if meeting.transcript.isEmpty {
+                Text("This meeting has no transcript yet.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+
+                if let failure = meeting.transcriptionFailure {
+                    problem(failure)
                 }
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
+
+                if hasAudio {
+                    // The audio is still on disk, so a failed transcription is a
+                    // retry rather than a lost meeting.
+                    Button("Transcribe") { transcriptMaker.make(for: meeting.id) }
+                } else {
+                    Text("Its audio is no longer on this Mac.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
             } else {
                 Text("This meeting has no notes yet.")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
 
                 if let failure = notesMaker.failures[meeting.id] {
-                    Label(failure, systemImage: "exclamationmark.triangle.fill")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.orange)
+                    problem(failure)
                 }
 
-                if !meeting.transcript.isEmpty {
-                    Button("Make Notes") { notesMaker.make(for: meeting.id) }
-                }
+                Button("Make Notes") { notesMaker.make(for: meeting.id) }
             }
         }
+    }
+
+    private var hasAudio: Bool {
+        store.audioByteCount(for: meeting) > 0
+    }
+
+    private func working(_ title: String) -> some View {
+        HStack(spacing: 6) {
+            ProgressView().controlSize(.small)
+            Text(title)
+        }
+        .font(.system(size: 12))
+        .foregroundStyle(.secondary)
+    }
+
+    private func problem(_ message: String) -> some View {
+        Label(message, systemImage: "exclamationmark.triangle.fill")
+            .font(.system(size: 11))
+            .foregroundStyle(.orange)
     }
 
     private var live: some View {
@@ -133,9 +164,7 @@ struct MeetingDetailView: View {
             // The recording carries on when transcription fails, so this reads as
             // a warning about the text rather than as the meeting having stopped.
             if let failure = session.transcriptionFailure {
-                Label(failure, systemImage: "exclamationmark.triangle.fill")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.orange)
+                problem(failure)
             }
 
             if session.liveTranscript.isEmpty, session.liveVolatileText.isEmpty {

@@ -32,6 +32,11 @@ nonisolated struct Meeting: Codable, Hashable, Identifiable, Sendable {
     /// so there is never a question of which of the two is authoritative.
     var importedTranscript: String
     var notes: Notes?
+    /// Why transcription last failed, kept with the meeting because that is
+    /// where the retry is offered. A failure that lives only in the session
+    /// disappears with the recording that produced it, which is exactly when it
+    /// is needed.
+    var transcriptionFailure: String?
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -43,6 +48,7 @@ nonisolated struct Meeting: Codable, Hashable, Identifiable, Sendable {
         // meeting's text could only have been imported.
         case importedTranscript = "transcript"
         case notes
+        case transcriptionFailure
     }
 
     init(
@@ -52,7 +58,8 @@ nonisolated struct Meeting: Codable, Hashable, Identifiable, Sendable {
         state: State = .complete,
         segments: [MeetingSegment] = [],
         importedTranscript: String = "",
-        notes: Notes? = nil
+        notes: Notes? = nil,
+        transcriptionFailure: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -61,6 +68,7 @@ nonisolated struct Meeting: Codable, Hashable, Identifiable, Sendable {
         self.segments = segments
         self.importedTranscript = importedTranscript
         self.notes = notes
+        self.transcriptionFailure = transcriptionFailure
     }
 
     var endedAt: Date? {

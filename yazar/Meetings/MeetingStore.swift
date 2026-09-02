@@ -118,6 +118,14 @@ final class MeetingStore {
         return directory
     }
 
+    /// How much audio a meeting has on disk, and zero when it has none. The
+    /// answer decides whether transcribing it again is even on offer.
+    func audioByteCount(for meeting: Meeting) -> Int {
+        guard let url = try? audioURL(for: meeting),
+              let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize else { return 0 }
+        return size
+    }
+
     func audioURL(for meeting: Meeting) throws -> URL {
         try directory(for: meeting).appending(path: "audio.pcm", directoryHint: .notDirectory)
     }

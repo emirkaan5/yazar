@@ -74,6 +74,7 @@ final class MeetingNotesMaker {
             // audio nobody captured, which reading the transcript cannot undo.
             meeting.state = previousState == .interrupted ? .interrupted : .complete
         case .failure(let error):
+            NSLog("Yazar could not make notes for a meeting: %@", error.localizedDescription)
             failures[id] = error.localizedDescription
             meeting.state = previousState
         }

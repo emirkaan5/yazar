@@ -114,6 +114,31 @@ Not verified:
 - Any UI rendering. Screen capture and UI scripting are both blocked in this
   environment.
 
+## First real recording, 2 September
+
+Capture works. A meeting recorded 4 minutes 16 seconds of system audio at an RMS
+of 0.05, well above the speech gate, and the record was filed correctly. The
+transcript was empty, so no notes were made — which is the notes path behaving,
+not failing.
+
+Why the transcript was empty could not be answered from disk, and that was the
+actual defect: a streaming transcription that fails had nowhere to put the
+reason. It lived in `MeetingSession.transcriptionFailure`, which is only ever
+shown in the live view of a meeting that is still recording, and the meeting was
+over. Nothing was logged either.
+
+So the failure now lives on the meeting record, is written to the system log the
+way the hot key failures already are, and the library offers **Transcribe** to
+run the stored audio through the provider again. Segments record where their
+audio sits in the file, which is what makes transcribing one segment of a resumed
+meeting possible; a single-segment meeting with no bounds falls back to the whole
+file, so recordings made before this can still be rescued.
+
+Still unknown as of this writing: what the provider actually returned. The next
+run will say. The default transcription provider is OpenRouter with
+`openai/whisper-1`, and a 45-second chunk is a ~1.9 MB base64 body, which is one
+thing to rule out.
+
 ## Things that cost time
 
 Worth knowing before they cost it again.

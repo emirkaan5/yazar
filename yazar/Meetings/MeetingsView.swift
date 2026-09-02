@@ -6,6 +6,7 @@ struct MeetingsView: View {
     @Bindable var store: MeetingStore
     let session: MeetingSession
     let notesMaker: MeetingNotesMaker
+    let transcriptMaker: MeetingTranscriptMaker
     @State private var selection: Meeting.ID?
 
     var body: some View {
@@ -21,7 +22,8 @@ struct MeetingsView: View {
                     meeting: meeting,
                     store: store,
                     session: session,
-                    notesMaker: notesMaker
+                    notesMaker: notesMaker,
+                    transcriptMaker: transcriptMaker
                 )
             } else if store.meetings.isEmpty {
                 ContentUnavailableView(
