@@ -13,5 +13,10 @@ DerivedData/
 .build/
 .swiftpm/
 
+
+.delta/
+docs/
+tools/
+
 # macOS
 .DS_Store
