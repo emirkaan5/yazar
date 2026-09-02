@@ -12,6 +12,10 @@ struct YazarApp: App {
                 appDelegate.showApp()
             }
 
+            Button("Meetings") {
+                appDelegate.showMeetings()
+            }
+
             Divider()
 
             Button("Quit Yazar") {
@@ -28,7 +32,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let settings: Settings
     private let permissions = Permissions()
     private let yazar: Yazar
+    private let store: MeetingStore
     private let composer: NotesComposer
+    private let meetingsWindow: MeetingsWindowController
     private var selectedPage = AppPage.dictation
     private var overlayPanel: OverlayPanel?
     private var appWindow: NSWindow?
@@ -37,7 +43,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let settings = Settings()
         self.settings = settings
         yazar = Yazar(settings: settings)
-        composer = NotesComposer(settings: settings)
+        let store = MeetingStore()
+        self.store = store
+        composer = NotesComposer(settings: settings, store: store)
+        meetingsWindow = MeetingsWindowController(store: store)
         super.init()
         permissions.refresh()
     }
@@ -59,6 +68,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        guard !activateExistingInstance() else { return }
+
+        // Safe only because a single instance is enforced above: with no other
+        // process able to hold them, a meeting still marked recording is
+        // orphaned rather than merely unclaimed.
+        store.closeOrphanedMeetings()
+
         if isReadyToStart {
             startEngine()
         } else {
@@ -70,6 +86,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         yazar.stop()
+    }
+
+    func showMeetings() {
+        meetingsWindow.show()
+    }
+
+    /// Hands off to the copy of Yazar already running and quits.
+    ///
+    /// Two instances would fight over the dictation trigger and, once meetings
+    /// record, over the store. The exit is logged because a build launched from
+    /// Xcode alongside the installed app disappears silently otherwise, and that
+    /// is baffling rather than obviously deliberate.
+    private func activateExistingInstance() -> Bool {
+        guard let identifier = Bundle.main.bundleIdentifier else { return false }
+        let mine = ProcessInfo.processInfo.processIdentifier
+        let others = NSRunningApplication
+            .runningApplications(withBundleIdentifier: identifier)
+            .filter { $0.processIdentifier != mine }
+        guard let existing = others.first else { return false }
+
+        NSLog("Yazar is already running (pid %d); activating it and quitting.", existing.processIdentifier)
+        existing.activate()
+        NSApp.terminate(nil)
+        return true
     }
 
     func showApp(page: AppPage? = nil) {

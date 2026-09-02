@@ -105,38 +105,11 @@ struct NotesSettingsView: View {
     private func notesSection(_ notes: Notes) -> some View {
         SettingsSection("Result") {
             VStack(alignment: .leading, spacing: 14) {
-                if notes.isEmpty {
-                    Text("The model found nothing to note in this transcript.")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                } else {
-                    if !notes.summary.isEmpty {
-                        group("Summary") {
-                            Text(notes.summary)
-                                .font(.system(size: 12))
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                    if !notes.keyPoints.isEmpty {
-                        group("Key points") { bullets(notes.keyPoints) }
-                    }
-                    if !notes.decisions.isEmpty {
-                        group("Decisions") { bullets(notes.decisions) }
-                    }
-                    if !notes.actionItems.isEmpty {
-                        group("Action items") {
-                            bullets(notes.actionItems.map { item in
-                                if let owner = item.owner, !owner.isEmpty {
-                                    "\(owner) — \(item.text)"
-                                } else {
-                                    item.text
-                                }
-                            })
-                        }
-                    }
+                NotesView(notes: notes)
 
-                    // Nothing is stored yet, so copying out is the only way a
-                    // result survives closing this window.
+                if !notes.isEmpty {
+                    // Copying is not the only way out any more — generating also
+                    // files the result under Meetings — but it stays the quickest.
                     Button("Copy as Markdown") {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(notes.markdown, forType: .string)
@@ -145,28 +118,6 @@ struct NotesSettingsView: View {
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    private func group(_ title: String, @ViewBuilder content: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
-            content()
-        }
-    }
-
-    private func bullets(_ items: [String]) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            ForEach(items.indices, id: \.self) { index in
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text("•")
-                    Text(items[index])
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .font(.system(size: 12))
-            }
         }
     }
 

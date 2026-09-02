@@ -71,10 +71,11 @@ struct YazarView: View {
 
 #Preview {
     let settings = Settings()
+    let store = MeetingStore()
     YazarView(
         settings: settings,
         permissions: Permissions(),
         yazar: Yazar(settings: settings),
-        composer: NotesComposer(settings: settings)
+        composer: NotesComposer(settings: settings, store: store)
     )
 }

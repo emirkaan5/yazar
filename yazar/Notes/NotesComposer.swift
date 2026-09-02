@@ -21,6 +21,10 @@ final class NotesComposer {
             // beside a changed source.
             guard transcript != oldValue else { return }
             notes = nil
+            // A new transcript is a new meeting. Without this, regenerating
+            // after replacing the text would overwrite the previous meeting's
+            // notes with notes from unrelated words.
+            savedMeetingID = nil
             if case .failed = state { state = .idle }
         }
     }
@@ -29,10 +33,15 @@ final class NotesComposer {
     private(set) var notes: Notes?
 
     private let settings: Settings
+    private let store: MeetingStore
     private var task: Task<Void, Never>?
+    /// Set once a transcript has been filed, so regenerating updates that
+    /// meeting instead of leaving a duplicate behind.
+    private var savedMeetingID: UUID?
 
-    init(settings: Settings) {
+    init(settings: Settings, store: MeetingStore) {
         self.settings = settings
+        self.store = store
     }
 
     var hasTranscript: Bool {
@@ -61,6 +70,7 @@ final class NotesComposer {
                 try Task.checkCancellation()
                 self?.notes = notes
                 self?.state = .idle
+                self?.file(notes)
             } catch is CancellationError {
                 return
             } catch {
@@ -68,6 +78,24 @@ final class NotesComposer {
                 self?.state = .failed(error.localizedDescription)
             }
         }
+    }
+
+    /// Files the result under Meetings. Generating is the only way a transcript
+    /// enters the library until capture exists, so it saves rather than offering
+    /// to: notes the user waited for should not be lost by closing a window.
+    private func file(_ notes: Notes) {
+        let id = savedMeetingID ?? UUID()
+        savedMeetingID = id
+        var meeting = store.meetings.first { $0.id == id }
+            ?? Meeting(id: id, title: Self.title(for: Date()))
+        meeting.transcript = transcript
+        meeting.notes = notes
+        meeting.state = .complete
+        store.save(meeting)
+    }
+
+    private static func title(for date: Date) -> String {
+        "Transcript — \(date.formatted(date: .abbreviated, time: .shortened))"
     }
 
     func cancel() {
