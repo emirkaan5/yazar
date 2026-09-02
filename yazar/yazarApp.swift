@@ -52,8 +52,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let store = MeetingStore()
         self.store = store
         composer = NotesComposer(settings: settings, store: store)
-        session = MeetingSession(store: store)
-        meetingsWindow = MeetingsWindowController(store: store)
+        let session = MeetingSession(store: store, settings: settings)
+        self.session = session
+        meetingsWindow = MeetingsWindowController(store: store, session: session)
         super.init()
         permissions.refresh()
     }
@@ -65,7 +66,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case .warmingUp, .recording: "waveform.circle.fill"
         case .transcribing: "ellipsis.circle"
         case .error: "exclamationmark.circle"
-        case .idle, .noSpeech: session.isRecording ? "record.circle" : "waveform"
+        case .idle, .noSpeech: meetingIcon
+        }
+    }
+
+    /// A meeting outlives the icon states dictation uses, so it gets the icon
+    /// whenever dictation is not using it, transcription included: the tail of a
+    /// meeting is still work the user is waiting on.
+    private var meetingIcon: String {
+        switch session.state {
+        case .starting, .recording, .stopping: "record.circle"
+        case .transcribing: "ellipsis.circle"
+        case .idle, .failed: "waveform"
         }
     }
 
@@ -73,11 +85,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         session.isRecording ? "Stop Meeting" : "Start Meeting"
     }
 
-    /// Start and stop both await the stream, so the menu item is held shut
-    /// rather than letting a second press land mid-transition.
+    /// Start and stop both await the stream, and the transcript is still being
+    /// finished after that, so the menu item is held shut rather than letting a
+    /// second press land mid-transition.
     var isMeetingBusy: Bool {
         switch session.state {
-        case .starting, .stopping: true
+        case .starting, .stopping, .transcribing: true
         case .idle, .recording, .failed: false
         }
     }

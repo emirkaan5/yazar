@@ -17,12 +17,34 @@ nonisolated struct MeetingSegment: Codable, Hashable, Identifiable, Sendable {
     var startedAt: Date
     var endedAt: Date?
     var endReason: EndReason?
+    /// What was said during this run. Held per segment rather than as one string
+    /// on the meeting so the seams stay visible: the gap markers are derived from
+    /// the segment boundaries, and a merged string has nowhere to put them.
+    var transcript: String
 
-    init(id: UUID = UUID(), startedAt: Date, endedAt: Date? = nil, endReason: EndReason? = nil) {
+    init(
+        id: UUID = UUID(),
+        startedAt: Date,
+        endedAt: Date? = nil,
+        endReason: EndReason? = nil,
+        transcript: String = ""
+    ) {
         self.id = id
         self.startedAt = startedAt
         self.endedAt = endedAt
         self.endReason = endReason
+        self.transcript = transcript
+    }
+
+    /// Written by hand so that segments recorded before transcription existed
+    /// decode as untranscribed rather than failing to decode at all.
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        startedAt = try container.decode(Date.self, forKey: .startedAt)
+        endedAt = try container.decodeIfPresent(Date.self, forKey: .endedAt)
+        endReason = try container.decodeIfPresent(EndReason.self, forKey: .endReason)
+        transcript = try container.decodeIfPresent(String.self, forKey: .transcript) ?? ""
     }
 
     /// An open segment is one nothing has closed yet, which after a launch scan

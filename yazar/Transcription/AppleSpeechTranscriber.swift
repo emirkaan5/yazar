@@ -3,129 +3,133 @@ import Foundation
 import Speech
 
 nonisolated struct AppleSpeechTranscriber: Transcriber {
+    /// One-shot dictation, expressed as a stream of exactly one buffer.
+    ///
+    /// The analyzer setup lives in `stream` and is not duplicated here: dictation
+    /// is a meeting that ends immediately, and the only difference that matters is
+    /// the preset. Dictation keeps `.transcription`, which reports finalized
+    /// results only, because nothing on screen shows a partial dictation.
     func transcribe(_ recording: Recording, language: String?) async throws -> String {
         guard !recording.pcm16.isEmpty else { return "" }
-        guard SpeechTranscriber.isAvailable else {
-            throw AppleSpeechTranscriberError.unavailable
-        }
 
-        guard let locale = await Self.supportedLocale(for: language) else {
-            throw AppleSpeechTranscriberError.unsupportedLanguage(Self.displayName(for: language))
-        }
+        let (audio, continuation) = AsyncStream.makeStream(of: Data.self)
+        continuation.yield(recording.pcm16)
+        continuation.finish()
 
-        let module = try await Self.downloadedModule(for: locale)
+        var text = ""
+        for try await update in stream(audio, language: language, preset: .transcription) {
+            text += update.finalized
+        }
+        // The stream ends quietly when the consuming task is cancelled, so the
+        // caller is told the difference between "cancelled" and "said nothing".
         try Task.checkCancellation()
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
-        let sourceBuffer = try makeBuffer(from: recording)
-        guard let analyzerFormat = await SpeechAnalyzer.bestAvailableAudioFormat(
-            compatibleWith: [module]
-        ) else {
-            throw AppleSpeechTranscriberError.unavailable
-        }
-        let analyzerBuffer = try convert(sourceBuffer, to: analyzerFormat)
+    /// Live transcription for a meeting, which uses the progressive preset so the
+    /// window can show the sentence being spoken rather than only settled text.
+    func transcribe(
+        _ audio: AsyncStream<Data>,
+        language: String?
+    ) -> AsyncThrowingStream<TranscriptUpdate, any Error> {
+        stream(audio, language: language, preset: .progressiveTranscription)
+    }
 
-        let (inputSequence, inputBuilder) = AsyncStream.makeStream(of: AnalyzerInput.self)
-        inputBuilder.yield(AnalyzerInput(buffer: analyzerBuffer))
-        inputBuilder.finish()
+    /// Drives one `SpeechAnalyzer` session for as long as `audio` lasts.
+    ///
+    /// Three concurrent halves, run as one group so that cancelling the caller
+    /// reaches all of them: feeding converts captured samples into analyzer
+    /// input, forwarding republishes the module's results, and the analyzer
+    /// itself sits between the two until the input sequence ends.
+    private func stream(
+        _ audio: AsyncStream<Data>,
+        language: String?,
+        preset: SpeechTranscriber.Preset
+    ) -> AsyncThrowingStream<TranscriptUpdate, any Error> {
+        AsyncThrowingStream { continuation in
+            let work = Task {
+                do {
+                    guard SpeechTranscriber.isAvailable else {
+                        throw AppleSpeechTranscriberError.unavailable
+                    }
+                    guard let locale = await Self.supportedLocale(for: language) else {
+                        throw AppleSpeechTranscriberError.unsupportedLanguage(
+                            Self.displayName(for: language)
+                        )
+                    }
+                    let module = try await Self.downloadedModule(for: locale, preset: preset)
+                    try Task.checkCancellation()
+                    guard let analyzerFormat = await SpeechAnalyzer.bestAvailableAudioFormat(
+                        compatibleWith: [module]
+                    ) else {
+                        throw AppleSpeechTranscriberError.unavailable
+                    }
+                    let converter = try PCMConverter(to: analyzerFormat)
 
-        let analyzer = SpeechAnalyzer(modules: [module])
-        return try await withTaskCancellationHandler {
-            async let transcription = collectResults(from: module)
-            do {
-                let lastSampleTime = try await analyzer.analyzeSequence(inputSequence)
-                try Task.checkCancellation()
-                if let lastSampleTime {
-                    try await analyzer.finalizeAndFinish(through: lastSampleTime)
-                } else {
-                    await analyzer.cancelAndFinishNow()
+                    let (inputSequence, inputBuilder) = AsyncStream.makeStream(of: AnalyzerInput.self)
+                    let analyzer = SpeechAnalyzer(modules: [module])
+
+                    try await withTaskCancellationHandler {
+                        try await withThrowingTaskGroup(of: Void.self) { group in
+                            group.addTask {
+                                // The analyzer waits on this sequence, so it is
+                                // finished on every way out, a conversion that
+                                // threw included.
+                                defer { inputBuilder.finish() }
+                                for await samples in audio {
+                                    if let buffer = try converter.convert(samples) {
+                                        inputBuilder.yield(AnalyzerInput(buffer: buffer))
+                                    }
+                                }
+                                // A resampler holds a tail of frames it could not
+                                // place; without this the last word goes with it.
+                                if let tail = try converter.finish() {
+                                    inputBuilder.yield(AnalyzerInput(buffer: tail))
+                                }
+                            }
+                            group.addTask {
+                                for try await result in module.results {
+                                    let text = String(result.text.characters)
+                                    continuation.yield(
+                                        result.isFinal
+                                            ? TranscriptUpdate(finalized: text)
+                                            : TranscriptUpdate(volatile: text)
+                                    )
+                                }
+                            }
+                            group.addTask {
+                                let lastSampleTime = try await analyzer.analyzeSequence(inputSequence)
+                                // Finalizing is what produces the last results,
+                                // so the forwarding task above is still running.
+                                if let lastSampleTime {
+                                    try await analyzer.finalizeAndFinish(through: lastSampleTime)
+                                } else {
+                                    await analyzer.cancelAndFinishNow()
+                                }
+                            }
+
+                            do {
+                                try await group.waitForAll()
+                            } catch {
+                                await analyzer.cancelAndFinishNow()
+                                throw error
+                            }
+                        }
+                    } onCancel: {
+                        // Finishing the input is not enough to unblock a
+                        // cancelled analyzer, and an abandoned one keeps a
+                        // speech session open for the rest of the launch.
+                        Task { await analyzer.cancelAndFinishNow() }
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
                 }
-                try Task.checkCancellation()
-                let text = try await transcription
-                return text.trimmingCharacters(in: .whitespacesAndNewlines)
-            } catch {
-                await analyzer.cancelAndFinishNow()
-                throw error
             }
-        } onCancel: {
-            Task { await analyzer.cancelAndFinishNow() }
+            // Covers both ends: a consumer that stops listening and a consuming
+            // task that is cancelled both land here and tear the analyzer down.
+            continuation.onTermination = { _ in work.cancel() }
         }
-    }
-
-    private func makeBuffer(from recording: Recording) throws -> AVAudioPCMBuffer {
-        let sampleCount = recording.pcm16.count / MemoryLayout<Int16>.size
-        guard sampleCount <= Int(AVAudioFrameCount.max),
-              let format = AVAudioFormat(
-                commonFormat: .pcmFormatInt16,
-                sampleRate: Double(Recording.sampleRate),
-                channels: 1,
-                interleaved: true
-              ),
-              let buffer = AVAudioPCMBuffer(
-                pcmFormat: format,
-                frameCapacity: AVAudioFrameCount(sampleCount)
-              ),
-              let samples = buffer.int16ChannelData?[0] else {
-            throw AppleSpeechTranscriberError.invalidAudio
-        }
-
-        recording.pcm16.copyBytes(
-            to: UnsafeMutableRawBufferPointer(
-                start: samples,
-                count: recording.pcm16.count
-            )
-        )
-        buffer.frameLength = AVAudioFrameCount(sampleCount)
-        return buffer
-    }
-
-    private func convert(
-        _ source: AVAudioPCMBuffer,
-        to format: AVAudioFormat
-    ) throws -> AVAudioPCMBuffer {
-        guard let converter = AVAudioConverter(from: source.format, to: format) else {
-            throw AppleSpeechTranscriberError.invalidAudio
-        }
-
-        let frameCount = ceil(
-            Double(source.frameLength) * format.sampleRate / source.format.sampleRate
-        ) + 1_024
-        guard frameCount <= Double(AVAudioFrameCount.max),
-              let output = AVAudioPCMBuffer(
-                pcmFormat: format,
-                frameCapacity: AVAudioFrameCount(frameCount)
-              ) else {
-            throw AppleSpeechTranscriberError.invalidAudio
-        }
-
-        // AVAudioConverterInputBlock is marked @Sendable, but the converter runs
-        // it synchronously before `convert` returns, so nothing crosses a boundary.
-        nonisolated(unsafe) let source = source
-        nonisolated(unsafe) var suppliedInput = false
-        var conversionError: NSError?
-        let status = converter.convert(to: output, error: &conversionError) { _, inputStatus in
-            if suppliedInput {
-                inputStatus.pointee = .endOfStream
-                return nil
-            }
-            suppliedInput = true
-            inputStatus.pointee = .haveData
-            return source
-        }
-        guard conversionError == nil,
-              status != .error,
-              output.frameLength > 0 else {
-            if let conversionError { throw conversionError }
-            throw AppleSpeechTranscriberError.invalidAudio
-        }
-        return output
-    }
-
-    private func collectResults(from module: SpeechTranscriber) async throws -> String {
-        var transcription = ""
-        for try await result in module.results {
-            transcription += String(result.text.characters)
-        }
-        return transcription
     }
 }
 
@@ -152,8 +156,11 @@ nonisolated extension AppleSpeechTranscriber {
     /// Returns the module for `locale`, first downloading its on-device model
     /// when macOS doesn't have it. The first dictation in a language pays for
     /// the download unless the settings screen already did.
-    static func downloadedModule(for locale: Locale) async throws -> SpeechTranscriber {
-        let module = SpeechTranscriber(locale: locale, preset: .transcription)
+    static func downloadedModule(
+        for locale: Locale,
+        preset: SpeechTranscriber.Preset = .transcription
+    ) async throws -> SpeechTranscriber {
+        let module = SpeechTranscriber(locale: locale, preset: preset)
         if let installationRequest = try await AssetInventory.assetInstallationRequest(
             supporting: [module]
         ) {
@@ -191,7 +198,6 @@ nonisolated extension AppleSpeechTranscriber {
 private enum AppleSpeechTranscriberError: LocalizedError {
     case unavailable
     case unsupportedLanguage(String)
-    case invalidAudio
 
     var errorDescription: String? {
         switch self {
@@ -199,8 +205,6 @@ private enum AppleSpeechTranscriberError: LocalizedError {
             "Apple Speech isn't available on this Mac."
         case .unsupportedLanguage(let language):
             "Apple Speech doesn't support \(language)."
-        case .invalidAudio:
-            "Apple Speech couldn't read the recording."
         }
     }
 }

@@ -38,6 +38,11 @@ nonisolated final class SystemAudioRecorder: NSObject, SCStreamOutput, SCStreamD
     /// the capture queue, so hop before touching anything isolated.
     var onUnexpectedStop: (@Sendable (SystemAudioRecorderError) -> Void)?
 
+    /// Hands over canonical PCM as it is captured, in the same runs that go to
+    /// the file, so a transcriber hears the meeting while it is happening rather
+    /// than reading the file back afterwards. Called on the capture queue.
+    var onSamples: (@Sendable (Data) -> Void)?
+
     private let captureQueue = DispatchQueue(label: "yazar.meeting.samples")
     private let sink = CaptureSink()
     private let capturing = Atomic(false)
@@ -217,6 +222,10 @@ nonisolated final class SystemAudioRecorder: NSObject, SCStreamOutput, SCStreamD
             try audioFile.append(samples)
         } catch {
             writeFailed.store(true, ordering: .relaxed)
+            return
         }
+        // Only what was kept is handed on, so the transcript never describes
+        // audio the file does not have.
+        onSamples?(samples)
     }
 }

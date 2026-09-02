@@ -88,7 +88,7 @@ final class NotesComposer {
         savedMeetingID = id
         var meeting = store.meetings.first { $0.id == id }
             ?? Meeting(id: id, title: Self.title(for: Date()))
-        meeting.transcript = transcript
+        meeting.importedTranscript = transcript
         meeting.notes = notes
         meeting.state = .complete
         store.save(meeting)

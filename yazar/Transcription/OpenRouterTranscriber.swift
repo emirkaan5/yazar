@@ -1,21 +1,89 @@
 import Foundation
 
 nonisolated struct OpenRouterTranscriber: Transcriber {
+    /// A dictation is a few seconds of audio and the user is waiting on it, so
+    /// the whole thing gets one short deadline.
+    private static let dictationTimeout = Duration.seconds(35)
+    /// A meeting chunk is longer audio on an unknown uplink, and it is one of
+    /// many. The deadline is per chunk rather than per meeting: one slow upload
+    /// must not take an hour of transcription with it.
+    private static let chunkTimeout = Duration.seconds(120)
+
     let apiKey: String
     let model: String
 
     func transcribe(_ recording: Recording, language: String?) async throws -> String {
-        try await withThrowingTaskGroup(of: String.self) { group in
-            group.addTask { try await performRequest(recording.wavData, language: language) }
+        try await withTimeout(Self.dictationTimeout) {
+            try await performRequest(recording.wavData, language: language)
+        }
+    }
+
+    /// Transcribes a meeting as it is captured, one chunk of audio per request.
+    ///
+    /// Sequential on purpose. Parallel uploads would return out of order and the
+    /// transcript is being appended to as it arrives, so ordering is the whole
+    /// contract. Chunk boundaries also lose the context either side of them,
+    /// which is the price of not waiting until the meeting ends to see anything.
+    func transcribe(
+        _ audio: AsyncStream<Data>,
+        language: String?
+    ) -> AsyncThrowingStream<TranscriptUpdate, any Error> {
+        AsyncThrowingStream { continuation in
+            let work = Task {
+                var chunker = AudioChunker()
+                do {
+                    for await samples in audio {
+                        for chunk in chunker.append(samples) {
+                            try await send(chunk, language: language, to: continuation)
+                        }
+                    }
+                    if let last = chunker.flush() {
+                        try await send(last, language: language, to: continuation)
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in work.cancel() }
+        }
+    }
+
+    private func send(
+        _ chunk: Data,
+        language: String?,
+        to continuation: AsyncThrowingStream<TranscriptUpdate, any Error>.Continuation
+    ) async throws {
+        let recording = Recording(pcm16: chunk)
+        // A silent chunk is a request that costs money and comes back as a
+        // hallucinated pleasantry, so it is never sent. Nobody spoke; the
+        // transcript says nothing.
+        guard recording.containsSpeech else { return }
+        let text = try await withTimeout(Self.chunkTimeout) {
+            try await performRequest(recording.wavData, language: language)
+        }
+        guard !text.isEmpty else { return }
+        // Nothing here is provisional: a chunk comes back finished or not at all.
+        continuation.yield(TranscriptUpdate(finalized: text + " "))
+    }
+
+    /// Bounds one request. `URLRequest.timeoutInterval` covers the network alone,
+    /// which is not the same as the wait the caller sees.
+    private func withTimeout<Value: Sendable>(
+        _ duration: Duration,
+        _ operation: @escaping @Sendable () async throws -> Value
+    ) async throws -> Value {
+        try await withThrowingTaskGroup(of: Value.self) { group in
+            group.addTask { try await operation() }
             group.addTask {
-                try await Task.sleep(for: .seconds(35))
+                try await Task.sleep(for: duration)
                 throw OpenRouterTranscriberError.timedOut
             }
             defer { group.cancelAll() }
-            guard let text = try await group.next() else {
+            guard let value = try await group.next() else {
                 throw OpenRouterTranscriberError.invalidResponse
             }
-            return text
+            return value
         }
     }
 

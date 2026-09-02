@@ -15,8 +15,17 @@ final class MeetingSession {
         case starting
         case recording
         case stopping
+        /// Audio has stopped but the provider has not finished with it. Kept
+        /// distinct from stopping because the wait is open-ended: a chunk may
+        /// still be uploading, and the meeting is not filed until it lands.
+        case transcribing
         case failed(String)
     }
+
+    /// A provider that never returns must not wedge meeting mode for the rest of
+    /// the launch, so the wait after the last sample is bounded. Generous, since
+    /// it may cover one more upload of a long chunk.
+    private static let finalizeTimeout = Duration.seconds(180)
 
     /// The activity token follows the states that are holding audio, so every
     /// path that ends or abandons a meeting also releases it. A leaked assertion
@@ -24,7 +33,7 @@ final class MeetingSession {
     private(set) var state: State = .idle {
         didSet {
             switch state {
-            case .starting, .recording, .stopping:
+            case .starting, .recording, .stopping, .transcribing:
                 beginActivity()
             case .idle, .failed:
                 endActivity()
@@ -34,16 +43,33 @@ final class MeetingSession {
 
     private(set) var activeMeetingID: UUID?
     private(set) var elapsed: TimeInterval = 0
+    /// Settled text for the segment being recorded. Written into the segment as
+    /// the meeting runs, so a crash costs the last few seconds rather than the
+    /// whole transcript.
+    private(set) var liveTranscript = ""
+    /// The provider's guess at what is being said right now, replaced with every
+    /// update and never stored. Only Apple Speech produces one; a chunked upload
+    /// has nothing provisional to show.
+    private(set) var liveVolatileText = ""
+    /// A transcription that failed while the recording carried on. Surfaced
+    /// rather than thrown, because the audio is still being kept and the meeting
+    /// should not be stopped over it.
+    private(set) var transcriptionFailure: String?
 
     private let store: MeetingStore
+    private let settings: Settings
     private let recorder = SystemAudioRecorder()
     private var audioFile: MeetingAudioFile?
+    private var audioContinuation: AsyncStream<Data>.Continuation?
+    private var transcriptionTask: Task<Void, Never>?
+    private var finalizeTask: Task<Void, Never>?
     private var activity: (any NSObjectProtocol)?
     private var sleepObserver: (any NSObjectProtocol)?
     private var tickTask: Task<Void, Never>?
 
-    init(store: MeetingStore) {
+    init(store: MeetingStore, settings: Settings) {
         self.store = store
+        self.settings = settings
         recorder.onUnexpectedStop = { [weak self] error in
             Task { @MainActor [weak self] in
                 self?.finish(reason: .interrupted, failure: error.localizedDescription)
@@ -51,16 +77,27 @@ final class MeetingSession {
         }
     }
 
+    /// Whether audio is still being captured.
     var isRecording: Bool {
         switch state {
         case .starting, .recording, .stopping: true
+        case .idle, .transcribing, .failed: false
+        }
+    }
+
+    /// Whether a meeting is in flight at all, transcription included. This is
+    /// what guards starting another one; `isRecording` is what the microphone
+    /// indicator and the stop control follow.
+    var isActive: Bool {
+        switch state {
+        case .starting, .recording, .stopping, .transcribing: true
         case .idle, .failed: false
         }
     }
 
     /// Begins a new meeting, or continues an existing one with a fresh segment.
     func start(resuming meeting: Meeting? = nil) async {
-        guard !isRecording else { return }
+        guard !isActive else { return }
         state = .starting
 
         var subject = meeting ?? Meeting(
@@ -71,15 +108,19 @@ final class MeetingSession {
         subject.state = .recording
         subject.segments.append(MeetingSegment(startedAt: Date()))
 
+        let (audio, continuation) = AsyncStream.makeStream(of: Data.self)
         do {
             let file = try MeetingAudioFile(url: try store.audioURL(for: subject))
             audioFile = file
+            audioContinuation = continuation
+            recorder.onSamples = { samples in continuation.yield(samples) }
             // Written before capture starts so a crash during startup still
             // leaves a record for the launch scan to find.
             store.save(subject)
             activeMeetingID = subject.id
             try await recorder.start(writingTo: file)
         } catch {
+            stopFeedingTranscriber()
             audioFile?.close()
             audioFile = nil
             activeMeetingID = nil
@@ -96,6 +137,7 @@ final class MeetingSession {
         }
 
         state = .recording
+        startTranscribing(audio)
         observeSleep()
         startTicking()
     }
@@ -118,32 +160,120 @@ final class MeetingSession {
         finish(reason: .stoppedByUser, failure: nil)
     }
 
+    /// Transcribes the meeting as it is captured.
+    ///
+    /// The same provider dictation uses. Failures land in `transcriptionFailure`
+    /// instead of stopping the meeting: the audio is being written either way,
+    /// and losing an hour of recording because a request failed would be the
+    /// worse trade.
+    private func startTranscribing(_ audio: AsyncStream<Data>) {
+        let transcriber = settings.transcriptionProvider.makeTranscriber(settings)
+        let language = settings.optionalLanguage
+        liveTranscript = ""
+        liveVolatileText = ""
+        transcriptionFailure = nil
+        transcriptionTask = Task { [weak self] in
+            do {
+                for try await update in transcriber.transcribe(audio, language: language) {
+                    guard let self else { return }
+                    liveTranscript += update.finalized
+                    liveVolatileText = update.volatile
+                }
+            } catch is CancellationError {
+                // Falls through: the audio stream still needs closing.
+            } catch {
+                self?.transcriptionFailure = error.localizedDescription
+            }
+            // Nothing is reading the audio stream once this returns, and the
+            // recorder would otherwise buffer the rest of the meeting into it.
+            self?.stopFeedingTranscriber()
+        }
+    }
+
+    /// Ends the flow of samples to the transcriber, which is also what makes it
+    /// finalize. Safe to call twice; the second call finds nothing to close.
+    private func stopFeedingTranscriber() {
+        recorder.onSamples = nil
+        audioContinuation?.finish()
+        audioContinuation = nil
+    }
+
     /// Closes the current segment and files the meeting.
     ///
     /// The segment is closed at the time recording actually ended, and the reason
     /// is recorded rather than inferred, because that reason is what will choose
-    /// the wording of the transcript's gap marker.
+    /// the wording of the transcript's gap marker. What the provider has settled
+    /// on so far is written with it, so a process that dies here still keeps the
+    /// transcript up to this point.
     private func finish(reason: MeetingSegment.EndReason, failure: String?) {
         tickTask?.cancel()
         tickTask = nil
         stopObservingSleep()
         audioFile?.close()
         audioFile = nil
+        stopFeedingTranscriber()
+        elapsed = 0
 
-        if let id = activeMeetingID, var meeting = store.meetings.first(where: { $0.id == id }) {
-            if let index = meeting.segments.indices.last, meeting.segments[index].isOpen {
-                meeting.segments[index].endedAt = Date()
-                meeting.segments[index].endReason = reason
-            }
-            // Paused rather than complete: nothing has transcribed this yet, and
-            // a stopped meeting is resumable by design.
+        guard let id = activeMeetingID else {
+            state = failure.map(State.failed) ?? .idle
+            return
+        }
+        closeSegment(of: id, reason: reason)
+        state = .transcribing
+        finalizeTask = Task { [weak self] in
+            await self?.awaitTranscription()
+            self?.file(id, reason: reason, failure: failure)
+        }
+    }
+
+    /// Waits for the tail of the transcription, under a deadline.
+    private func awaitTranscription() async {
+        guard let task = transcriptionTask else { return }
+        let deadline = Task { [weak self] in
+            try? await Task.sleep(for: Self.finalizeTimeout)
+            guard !Task.isCancelled else { return }
+            self?.transcriptionFailure = "Transcription did not finish in time."
+            task.cancel()
+        }
+        await task.value
+        deadline.cancel()
+    }
+
+    /// Writes the finished meeting: the last of the transcript, and the state it
+    /// came to rest in.
+    private func file(_ id: UUID, reason: MeetingSegment.EndReason, failure: String?) {
+        // The session is released whether or not the record is still there, so a
+        // meeting that vanished underneath cannot leave meeting mode stuck.
+        if var meeting = store.meetings.first(where: { $0.id == id }) {
+            writeTranscript(into: &meeting)
+            // Paused rather than complete: nothing has made notes from this yet,
+            // and a stopped meeting is resumable by design.
             meeting.state = reason == .interrupted ? .interrupted : .paused
             store.save(meeting)
         }
 
+        transcriptionTask = nil
         activeMeetingID = nil
-        elapsed = 0
+        liveVolatileText = ""
         state = failure.map(State.failed) ?? .idle
+    }
+
+    private func closeSegment(of id: UUID, reason: MeetingSegment.EndReason) {
+        guard var meeting = store.meetings.first(where: { $0.id == id }) else { return }
+        if let index = meeting.segments.indices.last, meeting.segments[index].isOpen {
+            meeting.segments[index].endedAt = Date()
+            meeting.segments[index].endReason = reason
+        }
+        writeTranscript(into: &meeting)
+        meeting.state = .transcribing
+        store.save(meeting)
+    }
+
+    /// Copies the settled text into the segment being recorded. The volatile tail
+    /// is deliberately left out: it is a guess, and it is about to be replaced.
+    private func writeTranscript(into meeting: inout Meeting) {
+        guard let index = meeting.segments.indices.last else { return }
+        meeting.segments[index].transcript = liveTranscript
     }
 
     /// macOS grants a short window before sleep. Idle sleep is already prevented
@@ -198,7 +328,8 @@ final class MeetingSession {
 
     private func flushRecord() {
         guard let id = activeMeetingID,
-              let meeting = store.meetings.first(where: { $0.id == id }) else { return }
+              var meeting = store.meetings.first(where: { $0.id == id }) else { return }
+        writeTranscript(into: &meeting)
         store.save(meeting)
     }
 

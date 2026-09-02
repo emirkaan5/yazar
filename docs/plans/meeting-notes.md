@@ -392,9 +392,17 @@ New, `yazar/Notes/`:
 - `Notes.swift` - the structured output type
 - `OpenRouterNoteMaker.swift`
 - `LanguageModelClient.swift` - provider-agnostic, shared with roadmap item 1
-- `AudioChunker.swift` - splits captured PCM on silence for OpenRouter
-  transcription. Note this is audio, not text: transcript chunking arrives only
-  with the deferred on-device path.
+
+New, `yazar/Transcription/`:
+
+- `AudioChunker.swift` - splits captured PCM into pieces small enough for one
+  OpenRouter request. Note this is audio, not text: transcript chunking arrives
+  only with the deferred on-device path. It sits here rather than under Notes
+  because every caller is a transcriber.
+- `TranscriptUpdate.swift` - one step of a streaming transcription, finalized
+  text kept apart from the volatile tail
+- `PCMConverter.swift` - one reused `AVAudioConverter` from canonical PCM into
+  a speech module's format
 
 Modified:
 

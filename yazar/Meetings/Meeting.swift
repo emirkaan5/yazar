@@ -17,13 +17,32 @@ nonisolated struct Meeting: Codable, Hashable, Identifiable, Sendable {
         case complete
     }
 
+    /// A pause shorter than this is the ordinary rhythm of a meeting and is left
+    /// unmarked; longer than it, the reader needs to know time passed.
+    private static let markedPause: TimeInterval = 120
+
     let id: UUID
     var title: String
     var startedAt: Date
     var state: State
     var segments: [MeetingSegment]
-    var transcript: String
+    /// Text that came from outside a recording: pasted in, or dropped as a file.
+    /// A recorded meeting leaves this empty and carries its text on its segments,
+    /// so there is never a question of which of the two is authoritative.
+    var importedTranscript: String
     var notes: Notes?
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case startedAt
+        case state
+        case segments
+        // Named `transcript` on disk, from before recordings existed and a
+        // meeting's text could only have been imported.
+        case importedTranscript = "transcript"
+        case notes
+    }
 
     init(
         id: UUID = UUID(),
@@ -31,7 +50,7 @@ nonisolated struct Meeting: Codable, Hashable, Identifiable, Sendable {
         startedAt: Date = Date(),
         state: State = .complete,
         segments: [MeetingSegment] = [],
-        transcript: String = "",
+        importedTranscript: String = "",
         notes: Notes? = nil
     ) {
         self.id = id
@@ -39,7 +58,7 @@ nonisolated struct Meeting: Codable, Hashable, Identifiable, Sendable {
         self.startedAt = startedAt
         self.state = state
         self.segments = segments
-        self.transcript = transcript
+        self.importedTranscript = importedTranscript
         self.notes = notes
     }
 
@@ -54,5 +73,59 @@ nonisolated struct Meeting: Codable, Hashable, Identifiable, Sendable {
         segments.reduce(0) { $0 + $1.duration }
     }
 
+    /// The text a reader, and `NoteMaker`, should see. Imported text is used
+    /// whole; a recording is assembled from its segments.
+    var transcript: String {
+        importedTranscript.isEmpty ? recordedTranscript : importedTranscript
+    }
+
+    /// Segment text in order, with a marker wherever the seam between two
+    /// segments swallowed time.
+    ///
+    /// The markers are not decoration. Run together, a deliberate four-hour break
+    /// and a crash that lost six minutes of speech both read as one continuous
+    /// conversation, and a model asked to summarize that will invent the causal
+    /// link that appears to be there.
+    var recordedTranscript: String {
+        var parts: [String] = []
+        for (index, segment) in segments.enumerated() {
+            let text = segment.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+            // A marker before any text would describe a gap in nothing.
+            if index > 0, !parts.isEmpty,
+               let marker = Self.marker(from: segments[index - 1], to: segment) {
+                parts.append(marker)
+            }
+            if !text.isEmpty { parts.append(text) }
+        }
+        return parts.joined(separator: "\n\n")
+    }
+
     var hasNotes: Bool { notes.map { !$0.isEmpty } ?? false }
+
+    /// How a seam reads depends on why the earlier segment ended. A user stop is
+    /// a pause the meeting waited through. An interruption is speech that
+    /// happened and was never captured, and saying so is the only thing that
+    /// stops the notes claiming to be complete.
+    private static func marker(from previous: MeetingSegment, to next: MeetingSegment) -> String? {
+        guard let endedAt = previous.endedAt else { return nil }
+        let gap = max(0, next.startedAt.timeIntervalSince(endedAt))
+        switch previous.endReason {
+        case .interrupted:
+            // "Up to", because the gap is the distance between the last captured
+            // sample and the resume, which bounds the loss rather than measuring it.
+            return "[recording interrupted, up to \(describe(gap)) not captured]"
+        case .stoppedByUser, .none:
+            guard gap >= markedPause else { return nil }
+            return "[resumed after \(describe(gap))]"
+        }
+    }
+
+    private static func describe(_ seconds: TimeInterval) -> String {
+        let allowed: Set<Duration.UnitsFormatStyle.Unit> = seconds < 3_600
+            ? [.minutes, .seconds]
+            : [.hours, .minutes]
+        return Duration.seconds(seconds).formatted(
+            .units(allowed: allowed, width: .wide, maximumUnitCount: 2)
+        )
+    }
 }
