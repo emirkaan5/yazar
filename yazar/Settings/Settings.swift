@@ -10,6 +10,7 @@ final class Settings {
         static let model = "model"
         static let language = "language"
         static let playSounds = "playSounds"
+        static let showRecordingTimer = "showRecordingTimer"
         static let soundTheme = "soundTheme"
         static let audioInputID = "audioInputID"
         static let dictationTrigger = "dictationTrigger"
@@ -39,6 +40,10 @@ final class Settings {
 
     var playSounds: Bool {
         didSet { defaults.set(playSounds, forKey: Key.playSounds) }
+    }
+
+    var showRecordingTimer: Bool {
+        didSet { defaults.set(showRecordingTimer, forKey: Key.showRecordingTimer) }
     }
 
     var soundTheme: SoundTheme {
@@ -99,6 +104,9 @@ final class Settings {
         playSounds = defaults.object(forKey: Key.playSounds) == nil
             ? true
             : defaults.bool(forKey: Key.playSounds)
+        showRecordingTimer = defaults.object(forKey: Key.showRecordingTimer) == nil
+            ? true
+            : defaults.bool(forKey: Key.showRecordingTimer)
         soundTheme = defaults.string(forKey: Key.soundTheme)
             .flatMap(SoundTheme.init(rawValue:))
             ?? .minimal

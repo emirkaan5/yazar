@@ -58,6 +58,18 @@ struct DictationSettingsView: View {
             RowDivider()
 
             SettingsRow(
+                "Show timer",
+                description: "Show elapsed time while recording."
+            ) {
+                Toggle("Show timer", isOn: $settings.showRecordingTimer)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+            }
+
+            RowDivider()
+
+            SettingsRow(
                 "Sound theme",
                 description: "Sounds used for start, stop, cancellation, and transcription errors."
             ) {

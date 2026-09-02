@@ -2,6 +2,7 @@ import SwiftUI
 
 struct OverlayView: View {
     @Bindable var yazar: Yazar
+    @Bindable var settings: Settings
     // Drives the entrance animation: the panel keeps this view alive across
     // sessions, so the blur/fade is keyed off the idle transition, not onAppear.
     @State private var visible = false
@@ -79,9 +80,11 @@ struct OverlayView: View {
     private var recordingView: some View {
         HStack(spacing: 8) {
             WaveformView(yazar: yazar)
-            TimelineView(.periodic(from: .now, by: 0.1)) { context in
-                Text(elapsed(at: context.date), format: .number.precision(.fractionLength(1)))
-                    .monospacedDigit()
+            if settings.showRecordingTimer {
+                TimelineView(.periodic(from: .now, by: 0.1)) { context in
+                    Text(elapsed(at: context.date), format: .number.precision(.fractionLength(1)))
+                        .monospacedDigit()
+                }
             }
         }
         .foregroundStyle(.white)
@@ -96,6 +99,8 @@ struct OverlayView: View {
         switch yazar.state {
         case .error: CGSize(width: 350, height: 35)
         case .noSpeech: CGSize(width: 135, height: 35)
+        case .warmingUp, .recording:
+            CGSize(width: settings.showRecordingTimer ? 115 : 65, height: 35)
         default: CGSize(width: 115, height: 35)
         }
     }

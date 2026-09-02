@@ -134,7 +134,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func startEngine() {
         permissions.stopPolling()
         if overlayPanel == nil {
-            overlayPanel = OverlayPanel(yazar: yazar)
+            overlayPanel = OverlayPanel(yazar: yazar, settings: settings)
         }
         do {
             try yazar.start()
