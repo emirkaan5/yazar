@@ -5,6 +5,7 @@ import SwiftUI
 struct MeetingsView: View {
     @Bindable var store: MeetingStore
     let session: MeetingSession
+    let notesMaker: MeetingNotesMaker
     @State private var selection: Meeting.ID?
 
     var body: some View {
@@ -16,7 +17,12 @@ struct MeetingsView: View {
             .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 340)
         } detail: {
             if let meeting = selectedMeeting {
-                MeetingDetailView(meeting: meeting, store: store, session: session)
+                MeetingDetailView(
+                    meeting: meeting,
+                    store: store,
+                    session: session,
+                    notesMaker: notesMaker
+                )
             } else if store.meetings.isEmpty {
                 ContentUnavailableView(
                     "No Meetings",
@@ -73,6 +79,7 @@ struct MeetingsView: View {
         case .paused: "Paused"
         case .interrupted: "Interrupted"
         case .transcribing: "Transcribing"
+        case .makingNotes: "Making notes"
         }
     }
 }

@@ -84,15 +84,27 @@ final class MeetingStore {
     /// last known time, never at now, since the gap between the crash and this
     /// launch was not recorded and must not look as though it was.
     func closeOrphanedMeetings() {
-        for meeting in meetings where meeting.state == .recording || meeting.state == .transcribing {
+        for meeting in meetings {
             var recovered = meeting
-            recovered.state = .interrupted
-            recovered.segments = recovered.segments.map { segment in
-                guard segment.isOpen else { return segment }
-                var closed = segment
-                closed.endedAt = segment.startedAt
-                closed.endReason = .interrupted
-                return closed
+            switch meeting.state {
+            case .recording, .transcribing:
+                recovered.state = .interrupted
+                recovered.segments = recovered.segments.map { segment in
+                    guard segment.isOpen else { return segment }
+                    var closed = segment
+                    closed.endedAt = segment.startedAt
+                    closed.endReason = .interrupted
+                    return closed
+                }
+            case .makingNotes:
+                // Not lost audio: the recording had already ended, and only a
+                // request died with the process. The meeting goes back where it
+                // was, and the library offers to make its notes again.
+                recovered.state = meeting.segments.last?.endReason == .interrupted
+                    ? .interrupted
+                    : .paused
+            case .paused, .interrupted, .complete:
+                continue
             }
             save(recovered)
         }

@@ -58,6 +58,7 @@ final class MeetingSession {
 
     private let store: MeetingStore
     private let settings: Settings
+    private let notesMaker: MeetingNotesMaker
     private let recorder = SystemAudioRecorder()
     private var audioFile: MeetingAudioFile?
     private var audioContinuation: AsyncStream<Data>.Continuation?
@@ -67,9 +68,10 @@ final class MeetingSession {
     private var sleepObserver: (any NSObjectProtocol)?
     private var tickTask: Task<Void, Never>?
 
-    init(store: MeetingStore, settings: Settings) {
+    init(store: MeetingStore, settings: Settings, notesMaker: MeetingNotesMaker) {
         self.store = store
         self.settings = settings
+        self.notesMaker = notesMaker
         recorder.onUnexpectedStop = { [weak self] error in
             Task { @MainActor [weak self] in
                 self?.finish(reason: .interrupted, failure: error.localizedDescription)
@@ -239,8 +241,13 @@ final class MeetingSession {
         deadline.cancel()
     }
 
-    /// Writes the finished meeting: the last of the transcript, and the state it
-    /// came to rest in.
+    /// Writes the finished meeting: the last of the transcript, the state it came
+    /// to rest in, and then its notes.
+    ///
+    /// Notes are made without being asked for. A meeting is recorded in order to
+    /// have them, and the transcript is finished at exactly this moment; leaving
+    /// it to a button means the useful half of the feature waits on the user
+    /// remembering to press one.
     private func file(_ id: UUID, reason: MeetingSegment.EndReason, failure: String?) {
         // The session is released whether or not the record is still there, so a
         // meeting that vanished underneath cannot leave meeting mode stuck.
@@ -250,6 +257,7 @@ final class MeetingSession {
             // and a stopped meeting is resumable by design.
             meeting.state = reason == .interrupted ? .interrupted : .paused
             store.save(meeting)
+            notesMaker.make(for: id)
         }
 
         transcriptionTask = nil

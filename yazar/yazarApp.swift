@@ -40,6 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let store: MeetingStore
     private let composer: NotesComposer
     private let session: MeetingSession
+    private let notesMaker: MeetingNotesMaker
     private let meetingsWindow: MeetingsWindowController
     private var selectedPage = AppPage.dictation
     private var overlayPanel: OverlayPanel?
@@ -52,9 +53,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let store = MeetingStore()
         self.store = store
         composer = NotesComposer(settings: settings, store: store)
-        let session = MeetingSession(store: store, settings: settings)
+        let notesMaker = MeetingNotesMaker(store: store, settings: settings)
+        self.notesMaker = notesMaker
+        let session = MeetingSession(store: store, settings: settings, notesMaker: notesMaker)
         self.session = session
-        meetingsWindow = MeetingsWindowController(store: store, session: session)
+        meetingsWindow = MeetingsWindowController(
+            store: store,
+            session: session,
+            notesMaker: notesMaker
+        )
         super.init()
         permissions.refresh()
     }

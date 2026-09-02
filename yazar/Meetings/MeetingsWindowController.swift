@@ -10,11 +10,13 @@ import SwiftUI
 final class MeetingsWindowController: NSObject, NSWindowDelegate {
     private let store: MeetingStore
     private let session: MeetingSession
+    private let notesMaker: MeetingNotesMaker
     private var window: NSWindow?
 
-    init(store: MeetingStore, session: MeetingSession) {
+    init(store: MeetingStore, session: MeetingSession, notesMaker: MeetingNotesMaker) {
         self.store = store
         self.session = session
+        self.notesMaker = notesMaker
     }
 
     func show() {
@@ -35,7 +37,7 @@ final class MeetingsWindowController: NSObject, NSWindowDelegate {
         window.contentMinSize = NSSize(width: 720, height: 420)
         window.center()
 
-        let hostingView = NSHostingView(rootView: MeetingsView(store: store, session: session))
+        let hostingView = NSHostingView(rootView: MeetingsView(store: store, session: session, notesMaker: notesMaker))
         hostingView.autoresizingMask = [.width, .height]
         window.contentView = hostingView
         window.delegate = self

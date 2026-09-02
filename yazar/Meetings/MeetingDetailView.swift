@@ -7,6 +7,7 @@ struct MeetingDetailView: View {
     let meeting: Meeting
     @Bindable var store: MeetingStore
     let session: MeetingSession
+    let notesMaker: MeetingNotesMaker
     @State private var showsTranscript = false
     @State private var confirmsDelete = false
 
@@ -20,9 +21,7 @@ struct MeetingDetailView: View {
                 } else if let notes = meeting.notes {
                     NotesView(notes: notes)
                 } else {
-                    Text("This meeting has no notes yet.")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
+                    pendingNotes
                 }
 
                 if !isLive, !meeting.transcript.isEmpty {
@@ -83,6 +82,37 @@ struct MeetingDetailView: View {
                 Button("Delete", role: .destructive) { store.delete(meeting) }
             } message: {
                 Text("Its transcript and notes are removed from this Mac. This cannot be undone.")
+            }
+        }
+    }
+
+    /// A meeting with a transcript and no notes. Notes are made automatically
+    /// when a recording stops, so reaching here means the attempt failed, the app
+    /// quit before it finished, or the transcript arrived some other way.
+    @ViewBuilder
+    private var pendingNotes: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if notesMaker.isWorking(on: meeting.id) {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("Making notes…")
+                }
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+            } else {
+                Text("This meeting has no notes yet.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+
+                if let failure = notesMaker.failures[meeting.id] {
+                    Label(failure, systemImage: "exclamationmark.triangle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.orange)
+                }
+
+                if !meeting.transcript.isEmpty {
+                    Button("Make Notes") { notesMaker.make(for: meeting.id) }
+                }
             }
         }
     }

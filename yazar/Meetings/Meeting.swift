@@ -14,6 +14,7 @@ nonisolated struct Meeting: Codable, Hashable, Identifiable, Sendable {
         case paused
         case interrupted
         case transcribing
+        case makingNotes
         case complete
     }
 
