@@ -156,9 +156,17 @@ error rather than a result, and the detail view treats empty notes as no notes s
 the retry is there. Decoding is exercised by a `swiftc` harness against plain,
 fenced, wrapped, empty, and non-JSON replies.
 
-The notes model is still `nvidia/nemotron-3-ultra-550b-a55b:free`, which produced
-clean JSON on the 50-minute transcript earlier. Whether it was the wrapper or the
-model having a bad day is not settled; the retry will say.
+What the records show: the same model and prompt produced good notes from a
+339-character recorded meeting and from the 35,129-character imported transcript,
+and nothing at all from the 13,800-character one. So it is not size in any simple
+way, and not the pipeline. The reply itself was never kept, which is why the
+question cannot be answered from here.
+
+It can be answered next time. A failed reply now arrives with its first 200
+characters in the error the user reads, and decoding tolerates the two ways a
+model nearly follows the shape it was given: snake_case keys, and a lone wrapper
+key. Where two readings of one reply both parse, the richer one wins, since a
+reply mixing conventions decodes under either and only one carries the lists.
 
 ## Things that cost time
 

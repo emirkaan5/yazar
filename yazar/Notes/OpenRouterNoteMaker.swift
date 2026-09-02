@@ -20,34 +20,81 @@ nonisolated struct OpenRouterNoteMaker: NoteMaker {
         try Task.checkCancellation()
 
         guard let json = Self.jsonObject(in: reply) else {
-            throw NoteMakerError.unreadableReply
+            throw NoteMakerError.unreadableReply(Self.preview(of: reply))
         }
         let notes: Notes
         do {
             notes = try Self.decode(json)
         } catch {
-            throw NoteMakerError.unreadableReply
+            throw NoteMakerError.unreadableReply(Self.preview(of: reply))
         }
         // Every field is optional, so an object with none of the expected keys
         // decodes cleanly into nothing at all. A transcript worth reading does
         // not produce that, and reporting it as "nothing to note" sends the user
-        // looking at their meeting rather than at the model.
-        guard !notes.isEmpty else { throw NoteMakerError.noNotes }
+        // looking at their meeting rather than at the model. The reply comes with
+        // it, because otherwise there is no way to tell afterwards which of the
+        // ways this goes wrong actually happened.
+        guard !notes.isEmpty else { throw NoteMakerError.noNotes(Self.preview(of: reply)) }
         return notes
     }
 
-    /// Decodes the payload, tolerating a model that wrapped it in one key of its
-    /// own — `{"notes": {…}}` rather than the object it was asked for. Only a
-    /// lone wrapper is unwrapped, so a real reply with one field is unaffected.
+    /// Decodes the payload, tolerating the two ways a model nearly follows the
+    /// shape it was given: snake_case keys, and wrapping the object in one key of
+    /// its own — `{"notes": {…}}`. Only a lone wrapper is unwrapped, so a real
+    /// reply carrying a single field is unaffected.
     private static func decode(_ json: Data) throws -> Notes {
-        let decoder = JSONDecoder()
-        let notes = try decoder.decode(Payload.self, from: json).notes
-        guard notes.isEmpty,
-              let object = try JSONSerialization.jsonObject(with: json) as? [String: Any],
-              object.count == 1,
-              let inner = object.values.first as? [String: Any] else { return notes }
-        let wrapped = try JSONSerialization.data(withJSONObject: inner)
-        return try decoder.decode(Payload.self, from: wrapped).notes
+        let plain = JSONDecoder()
+        let snakeCase = JSONDecoder()
+        snakeCase.keyDecodingStrategy = .convertFromSnakeCase
+
+        var bodies = [json]
+        if let object = try? JSONSerialization.jsonObject(with: json) as? [String: Any],
+           object.count == 1,
+           let inner = object.values.first as? [String: Any],
+           let unwrapped = try? JSONSerialization.data(withJSONObject: inner) {
+            bodies.append(unwrapped)
+        }
+
+        // The richest reading wins rather than the first that is not empty. A
+        // reply mixing conventions — "summary" beside "key_points" — decodes
+        // under either strategy, and only one of the two carries the lists.
+        var best: Notes?
+        var failure: (any Error)?
+        for body in bodies {
+            for decoder in [plain, snakeCase] {
+                do {
+                    let notes = try decoder.decode(Payload.self, from: body).notes
+                    if best.map({ Self.weight(of: notes) > Self.weight(of: $0) }) ?? true {
+                        best = notes
+                    }
+                } catch {
+                    failure = failure ?? error
+                }
+            }
+        }
+        guard let best else {
+            throw failure ?? NoteMakerError.unreadableReply("")
+        }
+        return best
+    }
+
+    /// How much a decoded reading actually carries, used to choose between two
+    /// readings of the same reply.
+    private static func weight(of notes: Notes) -> Int {
+        (notes.summary.isEmpty ? 0 : 1)
+            + notes.keyPoints.count
+            + notes.decisions.count
+            + notes.actionItems.count
+    }
+
+    /// The first line or so of what came back, for an error the user reads. Long
+    /// enough to recognize a shape, short enough to sit in a label.
+    private static func preview(of reply: String) -> String {
+        let flattened = reply
+            .split(whereSeparator: \.isNewline)
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespaces)
+        return flattened.count > 200 ? flattened.prefix(200) + "…" : flattened
     }
 
     // Rules earn their place by naming a specific way these notes go wrong:
@@ -122,14 +169,17 @@ nonisolated struct OpenRouterNoteMaker: NoteMaker {
 
 enum NoteMakerError: LocalizedError {
     case emptyTranscript
-    case unreadableReply
-    case noNotes
+    case unreadableReply(String)
+    case noNotes(String)
 
     var errorDescription: String? {
         switch self {
-        case .emptyTranscript: "There is no transcript to make notes from."
-        case .unreadableReply: "The model's reply was not usable notes. Try again, or try another model."
-        case .noNotes: "The model replied without any notes. Try again, or try another model."
+        case .emptyTranscript:
+            "There is no transcript to make notes from."
+        case .unreadableReply(let reply):
+            "The model's reply was not usable notes. Try another model. It said: \(reply)"
+        case .noNotes(let reply):
+            "The model replied without any notes. Try another model. It said: \(reply)"
         }
     }
 }
