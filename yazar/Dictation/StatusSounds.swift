@@ -11,6 +11,7 @@ enum StatusSound: String, Sendable {
 enum SoundTheme: String, CaseIterable, Identifiable, Sendable {
     case minimal
     case playful
+    case mechanical
 
     var id: Self { self }
 
@@ -18,6 +19,7 @@ enum SoundTheme: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .minimal: "Minimal"
         case .playful: "Playful"
+        case .mechanical: "Mechanical"
         }
     }
 }
