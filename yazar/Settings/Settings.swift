@@ -8,6 +8,7 @@ final class Settings {
     private enum Key {
         static let transcriptionProvider = "transcriptionProvider"
         static let model = "model"
+        static let notesModel = "notesModel"
         static let language = "language"
         static let playSounds = "playSounds"
         static let showRecordingTimer = "showRecordingTimer"
@@ -29,6 +30,12 @@ final class Settings {
 
     var openRouterModel: String {
         didSet { defaults.set(openRouterModel, forKey: Key.model) }
+    }
+
+    /// The chat model that writes notes, kept apart from `openRouterModel`
+    /// because that one transcribes audio and the two are never the same model.
+    var openRouterNotesModel: String {
+        didSet { defaults.set(openRouterNotesModel, forKey: Key.notesModel) }
     }
 
     /// Raw text-field contents. `optionalLanguage` is the canonical reading of
@@ -100,6 +107,8 @@ final class Settings {
             .flatMap(TranscriptionProvider.init(rawValue:))
             ?? .openRouter
         openRouterModel = defaults.string(forKey: Key.model) ?? "openai/whisper-1"
+        openRouterNotesModel = defaults.string(forKey: Key.notesModel)
+            ?? "nvidia/nemotron-3-ultra-550b-a55b:free"
         language = defaults.string(forKey: Key.language) ?? ""
         playSounds = defaults.object(forKey: Key.playSounds) == nil
             ? true

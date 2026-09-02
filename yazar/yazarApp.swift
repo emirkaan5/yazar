@@ -28,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let settings: Settings
     private let permissions = Permissions()
     private let yazar: Yazar
+    private let composer: NotesComposer
     private var selectedPage = AppPage.dictation
     private var overlayPanel: OverlayPanel?
     private var appWindow: NSWindow?
@@ -36,6 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let settings = Settings()
         self.settings = settings
         yazar = Yazar(settings: settings)
+        composer = NotesComposer(settings: settings)
         super.init()
         permissions.refresh()
     }
@@ -99,6 +101,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 settings: settings,
                 permissions: permissions,
                 yazar: yazar,
+                composer: composer,
                 selection: Binding(
                     get: { [weak self] in self?.selectedPage ?? .dictation },
                     set: { [weak self] in self?.selectedPage = $0 }

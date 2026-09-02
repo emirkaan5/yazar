@@ -8,17 +8,20 @@ struct YazarView: View {
     @Bindable var settings: Settings
     @Bindable var permissions: Permissions
     let yazar: Yazar
+    @Bindable var composer: NotesComposer
     @Binding private var selection: AppPage
 
     init(
         settings: Settings,
         permissions: Permissions,
         yazar: Yazar,
+        composer: NotesComposer,
         selection: Binding<AppPage> = .constant(.dictation)
     ) {
         self.settings = settings
         self.permissions = permissions
         self.yazar = yazar
+        self.composer = composer
         _selection = selection
     }
 
@@ -41,6 +44,8 @@ struct YazarView: View {
                         DictationSettingsView(settings: settings, yazar: yazar)
                     case .transcription:
                         TranscriptionSettingsView(settings: settings)
+                    case .notes:
+                        NotesSettingsView(settings: settings, composer: composer)
                     case .systemAccess:
                         SystemAccessSettingsView(
                             permissions: permissions,
@@ -65,9 +70,11 @@ struct YazarView: View {
 }
 
 #Preview {
+    let settings = Settings()
     YazarView(
-        settings: Settings(),
+        settings: settings,
         permissions: Permissions(),
-        yazar: Yazar(settings: Settings())
+        yazar: Yazar(settings: settings),
+        composer: NotesComposer(settings: settings)
     )
 }
