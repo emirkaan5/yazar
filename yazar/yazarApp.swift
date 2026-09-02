@@ -178,6 +178,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// Xcode alongside the installed app disappears silently otherwise, and that
     /// is baffling rather than obviously deliberate.
     private func activateExistingInstance() -> Bool {
+        // A test run hosts the app in order to load the test bundle into it, and
+        // the developer's own copy is normally running at the same time. Quitting
+        // here takes the test runner with it before it can connect, so the whole
+        // suite fails with an early exit that says nothing about the tests.
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else {
+            return false
+        }
         guard let identifier = Bundle.main.bundleIdentifier else { return false }
         let mine = ProcessInfo.processInfo.processIdentifier
         let others = NSRunningApplication
