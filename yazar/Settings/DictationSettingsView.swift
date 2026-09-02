@@ -52,6 +52,7 @@ struct DictationSettingsView: View {
                 Toggle("Play sounds", isOn: $settings.playSounds)
                     .labelsHidden()
                     .toggleStyle(.switch)
+                    .controlSize(.small)
             }
 
             RowDivider()
@@ -80,6 +81,7 @@ struct DictationSettingsView: View {
                 Toggle("Demo mode", isOn: $settings.demoMode)
                     .labelsHidden()
                     .toggleStyle(.switch)
+                    .controlSize(.small)
             }
 
             RowDivider()
