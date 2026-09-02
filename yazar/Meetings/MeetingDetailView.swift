@@ -19,9 +19,12 @@ struct MeetingDetailView: View {
 
                 if isLive {
                     live
-                } else if let notes = meeting.notes {
+                } else if meeting.hasNotes, let notes = meeting.notes {
                     NotesView(notes: notes)
                 } else {
+                    // Notes that came back empty are treated as none: the retry
+                    // is the useful thing to offer, not a sentence saying the
+                    // meeting had nothing in it.
                     pendingNotes
                 }
 

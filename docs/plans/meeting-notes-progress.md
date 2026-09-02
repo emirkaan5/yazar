@@ -139,6 +139,27 @@ run will say. The default transcription provider is OpenRouter with
 `openai/whisper-1`, and a 45-second chunk is a ~1.9 MB base64 body, which is one
 thing to rule out.
 
+## Notes came back empty, same day
+
+With the provider switched to Apple Speech the transcript arrived, and the notes
+step then produced nothing: the detail view said "The model found nothing to note
+in this transcript," which is a dead end with no retry on it.
+
+Two defects behind one sentence. `Payload` has every field optional, so any JSON
+object at all decodes cleanly into empty notes — including `{"notes": {…}}`, the
+wrapper a model adds when it does not follow the shape exactly. And an empty
+result was saved as notes, so the view showed the empty-notes message instead of
+offering the attempt again.
+
+Now: a lone wrapper key is unwrapped before decoding, an all-empty result is an
+error rather than a result, and the detail view treats empty notes as no notes so
+the retry is there. Decoding is exercised by a `swiftc` harness against plain,
+fenced, wrapped, empty, and non-JSON replies.
+
+The notes model is still `nvidia/nemotron-3-ultra-550b-a55b:free`, which produced
+clean JSON on the 50-minute transcript earlier. Whether it was the wrapper or the
+model having a bad day is not settled; the retry will say.
+
 ## Things that cost time
 
 Worth knowing before they cost it again.

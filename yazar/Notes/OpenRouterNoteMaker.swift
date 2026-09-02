@@ -22,11 +22,32 @@ nonisolated struct OpenRouterNoteMaker: NoteMaker {
         guard let json = Self.jsonObject(in: reply) else {
             throw NoteMakerError.unreadableReply
         }
+        let notes: Notes
         do {
-            return try JSONDecoder().decode(Payload.self, from: json).notes
+            notes = try Self.decode(json)
         } catch {
             throw NoteMakerError.unreadableReply
         }
+        // Every field is optional, so an object with none of the expected keys
+        // decodes cleanly into nothing at all. A transcript worth reading does
+        // not produce that, and reporting it as "nothing to note" sends the user
+        // looking at their meeting rather than at the model.
+        guard !notes.isEmpty else { throw NoteMakerError.noNotes }
+        return notes
+    }
+
+    /// Decodes the payload, tolerating a model that wrapped it in one key of its
+    /// own — `{"notes": {…}}` rather than the object it was asked for. Only a
+    /// lone wrapper is unwrapped, so a real reply with one field is unaffected.
+    private static func decode(_ json: Data) throws -> Notes {
+        let decoder = JSONDecoder()
+        let notes = try decoder.decode(Payload.self, from: json).notes
+        guard notes.isEmpty,
+              let object = try JSONSerialization.jsonObject(with: json) as? [String: Any],
+              object.count == 1,
+              let inner = object.values.first as? [String: Any] else { return notes }
+        let wrapped = try JSONSerialization.data(withJSONObject: inner)
+        return try decoder.decode(Payload.self, from: wrapped).notes
     }
 
     // Rules earn their place by naming a specific way these notes go wrong:
@@ -102,11 +123,13 @@ nonisolated struct OpenRouterNoteMaker: NoteMaker {
 enum NoteMakerError: LocalizedError {
     case emptyTranscript
     case unreadableReply
+    case noNotes
 
     var errorDescription: String? {
         switch self {
         case .emptyTranscript: "There is no transcript to make notes from."
         case .unreadableReply: "The model's reply was not usable notes. Try again, or try another model."
+        case .noNotes: "The model replied without any notes. Try again, or try another model."
         }
     }
 }
