@@ -9,6 +9,9 @@ DerivedData/
 *.dSYM.zip
 *.dSYM
 
+# Per-developer signing overrides
+Local.xcconfig
+
 # Swift Package Manager
 .build/
 .swiftpm/
