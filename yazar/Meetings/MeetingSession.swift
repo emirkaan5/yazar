@@ -250,6 +250,7 @@ final class MeetingSession {
             meeting.transcriptionFailure = transcriptionFailure
             store.save(meeting)
             if transcriptionFailure == nil {
+                store.deleteAudio(for: meeting)
                 notesMaker.make(for: id)
             }
         }

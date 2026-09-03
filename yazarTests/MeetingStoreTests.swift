@@ -32,4 +32,24 @@ struct MeetingStoreTests {
         #expect(segment.endedAt == startedAt.addingTimeInterval(2))
         #expect(segment.endReason == .interrupted)
     }
+
+    @Test("Deletes audio without deleting the meeting")
+    func deletesOnlyAudio() throws {
+        let root = URL.temporaryDirectory.appending(
+            path: "YazarMeetingStoreTests-\(UUID())",
+            directoryHint: .isDirectory
+        )
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let store = MeetingStore(root: root)
+        let meeting = Meeting(title: "Transcribed")
+        store.save(meeting)
+        let audioURL = try store.audioURL(for: meeting)
+        try Data(count: 32_000).write(to: audioURL)
+
+        store.deleteAudio(for: meeting)
+
+        #expect(store.audioByteCount(for: meeting) == 0)
+        #expect(store.meetings.contains(where: { $0.id == meeting.id }))
+    }
 }

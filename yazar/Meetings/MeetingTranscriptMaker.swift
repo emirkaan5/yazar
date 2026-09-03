@@ -80,6 +80,9 @@ final class MeetingTranscriptMaker {
         meeting.transcriptionFailure = failure
         store.save(meeting)
 
+        if failure == nil {
+            store.deleteAudio(for: meeting)
+        }
         guard failure == nil, !meeting.transcript.isEmpty else { return }
         notesMaker.make(for: id)
     }

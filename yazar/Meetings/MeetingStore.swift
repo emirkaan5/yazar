@@ -119,6 +119,13 @@ final class MeetingStore {
         return size
     }
 
+    /// Removes raw audio once every segment has a successful transcript. The
+    /// meeting record remains; audio only exists while transcription can retry.
+    func deleteAudio(for meeting: Meeting) {
+        guard let url = try? audioURL(for: meeting) else { return }
+        try? FileManager.default.removeItem(at: url)
+    }
+
     func audioURL(for meeting: Meeting) throws -> URL {
         try directory(for: meeting).appending(path: "audio.pcm", directoryHint: .notDirectory)
     }
