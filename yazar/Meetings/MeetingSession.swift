@@ -254,7 +254,9 @@ final class MeetingSession {
             // and a stopped meeting is resumable by design.
             meeting.state = reason == .interrupted ? .interrupted : .paused
             store.save(meeting)
-            notesMaker.make(for: id)
+            if transcriptionFailure == nil {
+                notesMaker.make(for: id)
+            }
         }
 
         transcriptionTask = nil

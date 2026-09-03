@@ -20,6 +20,9 @@ struct MeetingDetailView: View {
                 if isLive {
                     live
                 } else if meeting.hasNotes, let notes = meeting.notes {
+                    if let failure = meeting.transcriptionFailure {
+                        problem("These notes were made from an incomplete transcript. \(failure)")
+                    }
                     NotesView(notes: notes)
                 } else {
                     // Notes that came back empty are treated as none: the retry
@@ -100,14 +103,38 @@ struct MeetingDetailView: View {
                 working("Transcribing…")
             } else if notesMaker.isWorking(on: meeting.id) {
                 working("Making notes…")
+            } else if let failure = meeting.transcriptionFailure {
+                Text("Transcription did not finish, so this transcript may be incomplete.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+
+                problem(failure)
+
+                HStack(spacing: 10) {
+                    if hasAudio {
+                        Button("Transcribe") { transcriptMaker.make(for: meeting.id) }
+                            .buttonStyle(.borderedProminent)
+                    }
+                    if !meeting.transcript.isEmpty {
+                        Button("Make Notes from Incomplete Transcript") {
+                            notesMaker.make(for: meeting.id)
+                        }
+                    }
+                }
+
+                if !hasAudio {
+                    Text("Its audio is no longer on this Mac.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+
+                if let notesFailure = notesMaker.failures[meeting.id] {
+                    problem(notesFailure)
+                }
             } else if meeting.transcript.isEmpty {
                 Text("This meeting has no transcript yet.")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
-
-                if let failure = meeting.transcriptionFailure {
-                    problem(failure)
-                }
 
                 if hasAudio {
                     // The audio is still on disk, so a failed transcription is a
