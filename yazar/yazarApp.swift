@@ -146,8 +146,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard !activateExistingInstance() else { return }
 
         // Safe only because a single instance is enforced above: with no other
-        // process able to hold them, a meeting still marked recording is
-        // orphaned rather than merely unclaimed.
+        // process able to hold it, an open segment is orphaned rather than
+        // merely unclaimed.
         store.closeOrphanedMeetings()
 
         if isReadyToStart {

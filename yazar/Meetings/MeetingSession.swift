@@ -233,8 +233,8 @@ final class MeetingSession {
         deadline.cancel()
     }
 
-    /// Writes the finished meeting: the last of the transcript, the state it came
-    /// to rest in, and then its notes.
+    /// Writes the finished meeting: the last of the transcript, any failure that
+    /// makes it incomplete, and then its notes.
     ///
     /// Notes are made without being asked for. A meeting is recorded in order to
     /// have them, and the transcript is finished at exactly this moment; leaving
@@ -281,7 +281,7 @@ final class MeetingSession {
 
     /// macOS grants a short window before sleep. Idle sleep is already prevented
     /// by the activity token, so reaching here means a deliberate sleep, and the
-    /// meeting ends cleanly rather than being left marked recording.
+    /// meeting closes its segment rather than leaving it open.
     private func observeSleep() {
         guard sleepObserver == nil else { return }
         sleepObserver = NSWorkspace.shared.notificationCenter.addObserver(
@@ -291,8 +291,8 @@ final class MeetingSession {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self, self.isRecording else { return }
-                // Synchronous: the window before sleep is short, and a record
-                // left marked recording is the thing to avoid.
+                // Synchronous: the window before sleep is short, and an open
+                // segment is the thing to avoid.
                 self.recorder.stopImmediately()
                 self.finish(reason: .interrupted, failure: nil)
             }

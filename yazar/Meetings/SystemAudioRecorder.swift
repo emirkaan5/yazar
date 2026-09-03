@@ -38,11 +38,10 @@ nonisolated final class SystemAudioRecorder: NSObject, SCStreamOutput, SCStreamD
     private let sink = CaptureSink()
     private let capturing = Atomic(false)
     private let writeFailed = Atomic(false)
+    private let unexpectedStop = Mutex<(@Sendable (SystemAudioRecorderError) -> Void)?>(nil)
 
     private var stream: SCStream?
     private var audioFile: MeetingAudioFile?
-    /// Capture-queue state. Callers install and clear it through a queue barrier.
-    private var onUnexpectedStop: (@Sendable (SystemAudioRecorderError) -> Void)?
 
     /// Opens `file` and starts capture. The shareable-content query is also what
     /// prompts for Screen Recording the first time, so permission is asked for
@@ -88,7 +87,7 @@ nonisolated final class SystemAudioRecorder: NSObject, SCStreamOutput, SCStreamD
         captureQueue.sync {
             sink.reset()
             audioFile = file
-            self.onUnexpectedStop = onUnexpectedStop
+            unexpectedStop.withLock { $0 = onUnexpectedStop }
         }
         writeFailed.store(false, ordering: .relaxed)
         capturing.store(true, ordering: .sequentiallyConsistent)
@@ -99,7 +98,7 @@ nonisolated final class SystemAudioRecorder: NSObject, SCStreamOutput, SCStreamD
             capturing.store(false, ordering: .sequentiallyConsistent)
             captureQueue.sync {
                 audioFile = nil
-                self.onUnexpectedStop = nil
+                unexpectedStop.withLock { $0 = nil }
             }
             throw SystemAudioRecorderError.captureSetupFailed
         }
@@ -119,7 +118,7 @@ nonisolated final class SystemAudioRecorder: NSObject, SCStreamOutput, SCStreamD
             flushLocked()
             audioFile?.synchronize()
             audioFile = nil
-            onUnexpectedStop = nil
+            unexpectedStop.withLock { $0 = nil }
         }
     }
 
@@ -137,7 +136,7 @@ nonisolated final class SystemAudioRecorder: NSObject, SCStreamOutput, SCStreamD
             flushLocked()
             audioFile?.synchronize()
             audioFile = nil
-            onUnexpectedStop = nil
+            unexpectedStop.withLock { $0 = nil }
         }
         if let stream {
             Task.detached { try? await stream.stopCapture() }
@@ -211,8 +210,11 @@ nonisolated final class SystemAudioRecorder: NSObject, SCStreamOutput, SCStreamD
 
     nonisolated func stream(_ stream: SCStream, didStopWithError error: Error) {
         guard capturing.exchange(false, ordering: .sequentiallyConsistent) else { return }
-        let callback = onUnexpectedStop
-        onUnexpectedStop = nil
+        let callback = unexpectedStop.withLock { callback in
+            let current = callback
+            callback = nil
+            return current
+        }
         callback?(.stoppedUnexpectedly(error.localizedDescription))
     }
 
