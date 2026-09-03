@@ -90,7 +90,6 @@ final class NotesComposer {
             ?? Meeting(id: id, title: Self.title(for: Date()))
         meeting.importedTranscript = transcript
         meeting.notes = notes
-        meeting.state = .complete
         store.save(meeting)
     }
 

@@ -45,6 +45,10 @@ nonisolated final class MeetingAudioFile: @unchecked Sendable {
     /// Seconds of audio written so far, derived from the file's size because raw
     /// PCM at a fixed rate has no other length to disagree with.
     var duration: TimeInterval {
+        Self.duration(forByteCount: availableBytes)
+    }
+
+    static func duration(forByteCount byteCount: Int) -> TimeInterval {
         Double(byteCount) / Double(Recording.sampleRate * MemoryLayout<Int16>.size)
     }
 

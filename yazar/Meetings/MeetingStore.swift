@@ -79,32 +79,25 @@ final class MeetingStore {
     /// Closes meetings that were still recording when the process died.
     ///
     /// Sound only because Yazar enforces a single instance: no other process can
-    /// be holding these, so a record left in `recording` is orphaned by
-    /// definition rather than merely unclaimed. The segment is closed at its own
-    /// last known time, never at now, since the gap between the crash and this
-    /// launch was not recorded and must not look as though it was.
+    /// be holding an open segment, so one found at launch is orphaned by
+    /// definition rather than merely unclaimed. It closes at its own last
+    /// recorded moment, never at now, since the gap after the crash was not
+    /// recorded and must not look as though it was.
     func closeOrphanedMeetings() {
         for meeting in meetings {
+            guard meeting.segments.contains(where: \.isOpen) else { continue }
             var recovered = meeting
-            switch meeting.state {
-            case .recording, .transcribing:
-                recovered.state = .interrupted
-                recovered.segments = recovered.segments.map { segment in
-                    guard segment.isOpen else { return segment }
-                    var closed = segment
-                    closed.endedAt = segment.startedAt
-                    closed.endReason = .interrupted
-                    return closed
-                }
-            case .makingNotes:
-                // Not lost audio: the recording had already ended, and only a
-                // request died with the process. The meeting goes back where it
-                // was, and the library offers to make its notes again.
-                recovered.state = meeting.segments.last?.endReason == .interrupted
-                    ? .interrupted
-                    : .paused
-            case .paused, .interrupted, .complete:
-                continue
+            let size = audioByteCount(for: meeting)
+            recovered.segments = recovered.segments.map { segment in
+                guard segment.isOpen else { return segment }
+                var closed = segment
+                let capturedBytes = max(0, size - (segment.audioStart ?? 0))
+                closed.audioEnd = size
+                closed.endedAt = segment.startedAt.addingTimeInterval(
+                    MeetingAudioFile.duration(forByteCount: capturedBytes)
+                )
+                closed.endReason = .interrupted
+                return closed
             }
             save(recovered)
         }

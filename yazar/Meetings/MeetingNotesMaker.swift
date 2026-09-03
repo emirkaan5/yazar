@@ -33,12 +33,11 @@ final class MeetingNotesMaker {
     /// at the end of a recording and the button in the library are the same path.
     func make(for id: UUID) {
         guard tasks[id] == nil,
-              var meeting = store.meetings.first(where: { $0.id == id }),
+              let meeting = store.meetings.first(where: { $0.id == id }),
               !meeting.transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         else { return }
 
         let transcript = meeting.transcript
-        let previousState = meeting.state
         let maker = OpenRouterNoteMaker(
             client: OpenRouterClient(
                 apiKey: settings.apiKey(for: .openRouter),
@@ -46,8 +45,6 @@ final class MeetingNotesMaker {
             )
         )
         failures[id] = nil
-        meeting.state = .makingNotes
-        store.save(meeting)
 
         tasks[id] = Task { [weak self] in
             let result: Result<Notes, any Error>
@@ -56,13 +53,12 @@ final class MeetingNotesMaker {
             } catch {
                 result = .failure(error)
             }
-            self?.finish(id, previousState: previousState, result: result)
+            self?.finish(id, result: result)
         }
     }
 
     private func finish(
         _ id: UUID,
-        previousState: Meeting.State,
         result: Result<Notes, any Error>
     ) {
         tasks[id] = nil
@@ -70,13 +66,9 @@ final class MeetingNotesMaker {
         switch result {
         case .success(let notes):
             meeting.notes = notes
-            // Interrupted outlives its notes being made. That badge is about
-            // audio nobody captured, which reading the transcript cannot undo.
-            meeting.state = previousState == .interrupted ? .interrupted : .complete
         case .failure(let error):
             NSLog("Yazar could not make notes for a meeting: %@", error.localizedDescription)
             failures[id] = error.localizedDescription
-            meeting.state = previousState
         }
         store.save(meeting)
     }

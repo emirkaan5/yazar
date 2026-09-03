@@ -98,10 +98,8 @@ final class MeetingSession {
 
         var subject = meeting ?? Meeting(
             title: Self.title(for: Date()),
-            state: .recording,
             segments: []
         )
-        subject.state = .recording
         subject.transcriptionFailure = nil
 
         let audio: MeetingAudio
@@ -250,9 +248,6 @@ final class MeetingSession {
             // Kept with the meeting so the library can say why it has no text,
             // and offer to transcribe the audio again.
             meeting.transcriptionFailure = transcriptionFailure
-            // Paused rather than complete: nothing has made notes from this yet,
-            // and a stopped meeting is resumable by design.
-            meeting.state = reason == .interrupted ? .interrupted : .paused
             store.save(meeting)
             if transcriptionFailure == nil {
                 notesMaker.make(for: id)
@@ -273,7 +268,6 @@ final class MeetingSession {
             meeting.segments[index].audioEnd = endOffset
         }
         writeTranscript(into: &meeting)
-        meeting.state = .transcribing
         store.save(meeting)
     }
 

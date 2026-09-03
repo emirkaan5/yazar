@@ -3,21 +3,9 @@ import Foundation
 /// One recorded or imported meeting, and everything derived from it.
 ///
 /// Transcript and notes live here rather than in sibling files so that one
-/// atomic write keeps them consistent with the state field beside them. Audio is
-/// the exception, and stays out of line because it is large and binary.
+/// atomic write keeps them consistent. Audio is the exception, and stays out of
+/// line because it is large and binary.
 nonisolated struct Meeting: Codable, Hashable, Identifiable, Sendable {
-    /// `paused` and `interrupted` differ only in how they were reached and share
-    /// a resume path. The distinction is kept because only one of them means
-    /// speech went unrecorded.
-    enum State: String, Codable, Hashable, Sendable {
-        case recording
-        case paused
-        case interrupted
-        case transcribing
-        case makingNotes
-        case complete
-    }
-
     /// A pause shorter than this is the ordinary rhythm of a meeting and is left
     /// unmarked; longer than it, the reader needs to know time passed.
     private static let markedPause: TimeInterval = 120
@@ -25,7 +13,6 @@ nonisolated struct Meeting: Codable, Hashable, Identifiable, Sendable {
     let id: UUID
     var title: String
     var startedAt: Date
-    var state: State
     var segments: [MeetingSegment]
     /// Text that came from outside a recording: pasted in, or dropped as a file.
     /// A recorded meeting leaves this empty and carries its text on its segments,
@@ -42,7 +29,6 @@ nonisolated struct Meeting: Codable, Hashable, Identifiable, Sendable {
         case id
         case title
         case startedAt
-        case state
         case segments
         // Named `transcript` on disk, from before recordings existed and a
         // meeting's text could only have been imported.
@@ -51,11 +37,14 @@ nonisolated struct Meeting: Codable, Hashable, Identifiable, Sendable {
         case transcriptionFailure
     }
 
+    private enum LegacyCodingKeys: String, CodingKey {
+        case state
+    }
+
     init(
         id: UUID = UUID(),
         title: String,
         startedAt: Date = Date(),
-        state: State = .complete,
         segments: [MeetingSegment] = [],
         importedTranscript: String = "",
         notes: Notes? = nil,
@@ -64,11 +53,36 @@ nonisolated struct Meeting: Codable, Hashable, Identifiable, Sendable {
         self.id = id
         self.title = title
         self.startedAt = startedAt
-        self.state = state
         self.segments = segments
         self.importedTranscript = importedTranscript
         self.notes = notes
         self.transcriptionFailure = transcriptionFailure
+    }
+
+    /// Recovers the only legacy state that carried information not represented
+    /// elsewhere: an interrupted meeting whose last segment predates end reasons.
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        startedAt = try container.decode(Date.self, forKey: .startedAt)
+        segments = try container.decodeIfPresent([MeetingSegment].self, forKey: .segments) ?? []
+        importedTranscript = try container.decodeIfPresent(
+            String.self,
+            forKey: .importedTranscript
+        ) ?? ""
+        notes = try container.decodeIfPresent(Notes.self, forKey: .notes)
+        transcriptionFailure = try container.decodeIfPresent(
+            String.self,
+            forKey: .transcriptionFailure
+        )
+
+        let legacy = try decoder.container(keyedBy: LegacyCodingKeys.self)
+        if try legacy.decodeIfPresent(String.self, forKey: .state) == "interrupted",
+           let last = segments.indices.last,
+           segments[last].endReason == nil {
+            segments[last].endReason = .interrupted
+        }
     }
 
     var endedAt: Date? {
@@ -110,6 +124,10 @@ nonisolated struct Meeting: Codable, Hashable, Identifiable, Sendable {
     }
 
     var hasNotes: Bool { notes.map { !$0.isEmpty } ?? false }
+
+    var wasInterrupted: Bool {
+        segments.last?.endReason == .interrupted
+    }
 
     /// How a seam reads depends on why the earlier segment ended. A user stop is
     /// a pause the meeting waited through. An interruption is speech that

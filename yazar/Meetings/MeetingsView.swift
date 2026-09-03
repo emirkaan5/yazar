@@ -61,7 +61,13 @@ struct MeetingsView: View {
 
             HStack(spacing: 6) {
                 Text(meeting.startedAt.formatted(date: .abbreviated, time: .shortened))
-                if let badge = MeetingsView.badge(for: meeting.state) {
+                if let badge = meetingBadge(
+                    for: meeting,
+                    activeMeetingID: session.activeMeetingID,
+                    isRecording: session.isRecording,
+                    isTranscribing: transcriptMaker.isWorking(on: meeting.id),
+                    isMakingNotes: notesMaker.isWorking(on: meeting.id)
+                ) {
                     Text(badge)
                         .foregroundStyle(.orange)
                 }
@@ -72,16 +78,4 @@ struct MeetingsView: View {
         .padding(.vertical, 2)
     }
 
-    /// Only states worth interrupting the user for get a badge. A complete
-    /// meeting is the norm and says nothing by saying nothing.
-    static func badge(for state: Meeting.State) -> String? {
-        switch state {
-        case .complete: nil
-        case .recording: "Recording"
-        case .paused: "Paused"
-        case .interrupted: "Interrupted"
-        case .transcribing: "Transcribing"
-        case .makingNotes: "Making notes"
-        }
-    }
 }

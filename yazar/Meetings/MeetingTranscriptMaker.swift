@@ -38,9 +38,7 @@ final class MeetingTranscriptMaker {
 
         let transcriber = settings.transcriptionProvider.makeTranscriber(settings)
         let language = settings.optionalLanguage
-        let previousState = meeting.state
         meeting.transcriptionFailure = nil
-        meeting.state = .transcribing
         store.save(meeting)
 
         tasks[id] = Task { [weak self] in
@@ -65,13 +63,12 @@ final class MeetingTranscriptMaker {
                     break
                 }
             }
-            self?.finish(id, previousState: previousState, texts: texts, failure: failure)
+            self?.finish(id, texts: texts, failure: failure)
         }
     }
 
     private func finish(
         _ id: UUID,
-        previousState: Meeting.State,
         texts: [Int: String],
         failure: String?
     ) {
@@ -81,7 +78,6 @@ final class MeetingTranscriptMaker {
             meeting.segments[index].transcript = text
         }
         meeting.transcriptionFailure = failure
-        meeting.state = previousState
         store.save(meeting)
 
         guard failure == nil, !meeting.transcript.isEmpty else { return }

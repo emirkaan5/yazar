@@ -65,7 +65,13 @@ struct MeetingDetailView: View {
                 if meeting.recordedDuration > 0 {
                     Text(duration)
                 }
-                if let badge = MeetingsView.badge(for: meeting.state) {
+                if let badge = meetingBadge(
+                    for: meeting,
+                    activeMeetingID: session.activeMeetingID,
+                    isRecording: session.isRecording,
+                    isTranscribing: transcriptMaker.isWorking(on: meeting.id),
+                    isMakingNotes: notesMaker.isWorking(on: meeting.id)
+                ) {
                     Text(badge).foregroundStyle(.orange)
                 }
             }
