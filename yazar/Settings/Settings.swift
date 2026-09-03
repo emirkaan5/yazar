@@ -8,9 +8,11 @@ final class Settings {
     private enum Key {
         static let transcriptionProvider = "transcriptionProvider"
         static let model = "model"
+        static let notesModel = "notesModel"
         static let language = "language"
         static let playSounds = "playSounds"
         static let showRecordingTimer = "showRecordingTimer"
+        static let meetingsEnabled = "meetingsEnabled"
         static let soundTheme = "soundTheme"
         static let audioInputID = "audioInputID"
         static let dictationTrigger = "dictationTrigger"
@@ -31,6 +33,12 @@ final class Settings {
         didSet { defaults.set(openRouterModel, forKey: Key.model) }
     }
 
+    /// The chat model that writes notes, kept apart from `openRouterModel`
+    /// because that one transcribes audio and the two are never the same model.
+    var openRouterNotesModel: String {
+        didSet { defaults.set(openRouterNotesModel, forKey: Key.notesModel) }
+    }
+
     /// Raw text-field contents. `optionalLanguage` is the canonical reading of
     /// it, and persistence goes through that too, so the rule for what counts as
     /// "no language" is written once. A nil value clears the key.
@@ -44,6 +52,12 @@ final class Settings {
 
     var showRecordingTimer: Bool {
         didSet { defaults.set(showRecordingTimer, forKey: Key.showRecordingTimer) }
+    }
+
+    /// Meeting recording is opt-in: it needs Screen Recording and writes audio
+    /// to disk, neither of which a dictation-only user should be asked for.
+    var meetingsEnabled: Bool {
+        didSet { defaults.set(meetingsEnabled, forKey: Key.meetingsEnabled) }
     }
 
     var soundTheme: SoundTheme {
@@ -100,6 +114,8 @@ final class Settings {
             .flatMap(TranscriptionProvider.init(rawValue:))
             ?? .openRouter
         openRouterModel = defaults.string(forKey: Key.model) ?? "openai/whisper-1"
+        openRouterNotesModel = defaults.string(forKey: Key.notesModel)
+            ?? "nvidia/nemotron-3-ultra-550b-a55b:free"
         language = defaults.string(forKey: Key.language) ?? ""
         playSounds = defaults.object(forKey: Key.playSounds) == nil
             ? true
@@ -107,6 +123,7 @@ final class Settings {
         showRecordingTimer = defaults.object(forKey: Key.showRecordingTimer) == nil
             ? true
             : defaults.bool(forKey: Key.showRecordingTimer)
+        meetingsEnabled = defaults.bool(forKey: Key.meetingsEnabled)
         soundTheme = defaults.string(forKey: Key.soundTheme)
             .flatMap(SoundTheme.init(rawValue:))
             ?? .minimal

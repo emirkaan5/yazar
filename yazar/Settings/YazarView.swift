@@ -8,17 +8,23 @@ struct YazarView: View {
     @Bindable var settings: Settings
     @Bindable var permissions: Permissions
     let yazar: Yazar
+    let store: MeetingStore
+    let session: MeetingSession
     @Binding private var selection: AppPage
 
     init(
         settings: Settings,
         permissions: Permissions,
         yazar: Yazar,
+        store: MeetingStore,
+        session: MeetingSession,
         selection: Binding<AppPage> = .constant(.dictation)
     ) {
         self.settings = settings
         self.permissions = permissions
         self.yazar = yazar
+        self.store = store
+        self.session = session
         _selection = selection
     }
 
@@ -41,6 +47,12 @@ struct YazarView: View {
                         DictationSettingsView(settings: settings, yazar: yazar)
                     case .transcription:
                         TranscriptionSettingsView(settings: settings)
+                    case .meetings:
+                        MeetingsSettingsView(
+                            settings: settings,
+                            store: store,
+                            session: session
+                        )
                     case .systemAccess:
                         SystemAccessSettingsView(
                             permissions: permissions,
@@ -65,9 +77,14 @@ struct YazarView: View {
 }
 
 #Preview {
+    let settings = Settings()
+    let store = MeetingStore()
+    let notesMaker = MeetingNotesMaker(store: store, settings: settings)
     YazarView(
-        settings: Settings(),
+        settings: settings,
         permissions: Permissions(),
-        yazar: Yazar(settings: Settings())
+        yazar: Yazar(settings: settings),
+        store: store,
+        session: MeetingSession(store: store, settings: settings, notesMaker: notesMaker)
     )
 }

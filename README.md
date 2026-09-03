@@ -30,7 +30,7 @@ Yazar runs in the menu bar.
 
 Yazar reads the active text field through macOS Accessibility and fits each transcription to the current caret or selection before pressing ⌘V. If the target does not expose its text context, Yazar pastes the original transcription unchanged. Every transcription still reaches the clipboard, so it remains available when the active app does not accept the synthetic shortcut.
 
-Apple Speech processes recordings on your Mac. macOS may download the selected language asset into system storage the first time you use it and manages later model updates. Yazar does not write recordings to disk.
+Apple Speech processes recordings on your Mac. macOS may download the selected language asset into system storage the first time you use it and manages later model updates. Yazar does not write dictation recordings to disk. Meeting capture writes its audio to disk while it is still needed for transcription and removes it after transcription succeeds.
 
 When you select OpenRouter, Yazar sends each recording directly to OpenRouter for transcription. Your API key stays in the macOS Keychain.
 
