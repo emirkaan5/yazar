@@ -3,19 +3,20 @@ import SwiftUI
 /// The shared shape of every settings page: a titled card of rows, each row a
 /// label and description on the left and one control on the right.
 
-struct SettingsSection<Content: View>: View {
-    private let title: String
+struct SettingsSection<Header: View, Content: View>: View {
+    private let header: Header
     private let content: Content
 
-    init(_ title: String, @ViewBuilder content: () -> Content) {
-        self.title = title
+    /// A card under a free-form header, for when the header carries more than a
+    /// title — column labels that have to line up with the rows below it.
+    init(@ViewBuilder header: () -> Header, @ViewBuilder content: () -> Content) {
+        self.header = header()
         self.content = content()
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.system(size: 15, weight: .semibold))
+            header
 
             VStack(spacing: 0) {
                 content
@@ -28,6 +29,27 @@ struct SettingsSection<Content: View>: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+extension SettingsSection where Header == SettingsSectionTitle {
+    init(_ title: String, @ViewBuilder content: () -> Content) {
+        self.init(header: { SettingsSectionTitle(title) }, content: content)
+    }
+}
+
+/// The title above a settings card. Its own type because a section whose header
+/// carries more than a title still has to draw the title the same way.
+struct SettingsSectionTitle: View {
+    private let title: String
+
+    init(_ title: String) {
+        self.title = title
+    }
+
+    var body: some View {
+        Text(title)
+            .font(.system(size: 15, weight: .semibold))
     }
 }
 

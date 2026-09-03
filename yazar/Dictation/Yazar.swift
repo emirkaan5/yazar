@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 
@@ -168,6 +169,12 @@ final class Yazar {
         recorderPollingTask?.cancel()
         let recording = recorder.stop()
         let insertionContext = textContextCapture.finish()
+        // Prefer the focused element's application so formatting and fitting
+        // describe the same target. Fall back to the workspace when
+        // Accessibility cannot provide a context.
+        let targetApplication = insertionContext?.applicationBundleIdentifier
+            ?? NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        let rules = settings.formatting.rules(for: targetApplication)
         let demoMode = isDemoMode
         play(.stop)
         recordingStartedAt = nil
@@ -196,7 +203,7 @@ final class Yazar {
                 text = try await transcriber.transcribe(recording, language: language)
 #endif
                 try Task.checkCancellation()
-                self?.deliver(text, context: insertionContext)
+                self?.deliver(text, rules: rules, context: insertionContext)
             } catch is CancellationError {
                 return
             } catch {
@@ -240,12 +247,22 @@ final class Yazar {
     /// Keep every transcription on the clipboard and attempt to paste it into the
     /// focused application. A provider that recognized nothing lands in the same
     /// place as audio that never cleared the speech gate.
-    private func deliver(_ text: String, context: TextInsertionContext?) {
+    private func deliver(
+        _ text: String,
+        rules: Set<FormattingRule>,
+        context: TextInsertionContext?
+    ) {
         guard !text.isEmpty else {
             showNoSpeech()
             return
         }
-        let textToPaste = context.map { TranscriptFitter.fit(text, to: $0) } ?? text
+        // The user's rules first, then the fit to the surrounding text: fitting
+        // reconciles the final string with its neighbours, so nothing may run
+        // after it.
+        var textToPaste = TranscriptFormatter.apply(rules, to: text)
+        if let context {
+            textToPaste = TranscriptFitter.fit(textToPaste, to: context)
+        }
         switch Inserter.insert(textToPaste) {
         case .delivered:
             state = .idle

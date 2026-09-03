@@ -3,6 +3,7 @@ import Foundation
 enum AppPage: CaseIterable, Identifiable {
     case dictation
     case transcription
+    case formatting
     case meetings
     case systemAccess
 
@@ -12,6 +13,7 @@ enum AppPage: CaseIterable, Identifiable {
         switch self {
         case .dictation: "Dictation"
         case .transcription: "Transcription"
+        case .formatting: "Formatting"
         case .meetings: "Meetings"
         case .systemAccess: "System Access"
         }
@@ -21,6 +23,7 @@ enum AppPage: CaseIterable, Identifiable {
         switch self {
         case .dictation: "waveform"
         case .transcription: "text.bubble"
+        case .formatting: "textformat"
         case .meetings: "person.2.wave.2"
         case .systemAccess: "lock.shield"
         }
