@@ -12,13 +12,15 @@ struct YazarApp: App {
                 appDelegate.showApp()
             }
 
-            Button(appDelegate.meetingActionTitle) {
-                appDelegate.toggleMeeting()
-            }
-            .disabled(appDelegate.isMeetingBusy)
+            if appDelegate.isMeetingsEnabled {
+                Button(appDelegate.meetingActionTitle) {
+                    appDelegate.toggleMeeting()
+                }
+                .disabled(appDelegate.isMeetingBusy)
 
-            Button("Meetings") {
-                appDelegate.showMeetings()
+                Button("Meetings") {
+                    appDelegate.showMeetings()
+                }
             }
 
             Divider()
@@ -38,7 +40,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let permissions = Permissions()
     private let yazar: Yazar
     private let store: MeetingStore
-    private let composer: NotesComposer
     private let session: MeetingSession
     private let notesMaker: MeetingNotesMaker
     private let transcriptMaker: MeetingTranscriptMaker
@@ -53,7 +54,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         yazar = Yazar(settings: settings)
         let store = MeetingStore()
         self.store = store
-        composer = NotesComposer(settings: settings, store: store)
         let notesMaker = MeetingNotesMaker(store: store, settings: settings)
         self.notesMaker = notesMaker
         let session = MeetingSession(store: store, settings: settings, notesMaker: notesMaker)
@@ -98,6 +98,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     var meetingActionTitle: String {
         session.isRecording ? "Stop Meeting" : "Start Meeting"
+    }
+
+    var isMeetingsEnabled: Bool {
+        settings.meetingsEnabled
     }
 
     /// Start and stop both await the stream, and the transcript is still being
@@ -227,7 +231,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 settings: settings,
                 permissions: permissions,
                 yazar: yazar,
-                composer: composer,
+                store: store,
+                session: session,
                 selection: Binding(
                     get: { [weak self] in self?.selectedPage ?? .dictation },
                     set: { [weak self] in self?.selectedPage = $0 }

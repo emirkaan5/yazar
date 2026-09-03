@@ -8,20 +8,23 @@ struct YazarView: View {
     @Bindable var settings: Settings
     @Bindable var permissions: Permissions
     let yazar: Yazar
-    @Bindable var composer: NotesComposer
+    let store: MeetingStore
+    let session: MeetingSession
     @Binding private var selection: AppPage
 
     init(
         settings: Settings,
         permissions: Permissions,
         yazar: Yazar,
-        composer: NotesComposer,
+        store: MeetingStore,
+        session: MeetingSession,
         selection: Binding<AppPage> = .constant(.dictation)
     ) {
         self.settings = settings
         self.permissions = permissions
         self.yazar = yazar
-        self.composer = composer
+        self.store = store
+        self.session = session
         _selection = selection
     }
 
@@ -44,8 +47,12 @@ struct YazarView: View {
                         DictationSettingsView(settings: settings, yazar: yazar)
                     case .transcription:
                         TranscriptionSettingsView(settings: settings)
-                    case .notes:
-                        NotesSettingsView(settings: settings, composer: composer)
+                    case .meetings:
+                        MeetingsSettingsView(
+                            settings: settings,
+                            store: store,
+                            session: session
+                        )
                     case .systemAccess:
                         SystemAccessSettingsView(
                             permissions: permissions,
@@ -72,10 +79,12 @@ struct YazarView: View {
 #Preview {
     let settings = Settings()
     let store = MeetingStore()
+    let notesMaker = MeetingNotesMaker(store: store, settings: settings)
     YazarView(
         settings: settings,
         permissions: Permissions(),
         yazar: Yazar(settings: settings),
-        composer: NotesComposer(settings: settings, store: store)
+        store: store,
+        session: MeetingSession(store: store, settings: settings, notesMaker: notesMaker)
     )
 }

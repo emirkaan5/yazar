@@ -29,7 +29,7 @@ struct MeetingsView: View {
                 ContentUnavailableView(
                     "No Meetings",
                     systemImage: "person.2.wave.2",
-                    description: Text("Start a meeting from the Yazar menu, or make notes from a transcript in Settings → Notes.")
+                    description: Text("Start a meeting from the Yazar menu.")
                 )
             } else {
                 ContentUnavailableView(

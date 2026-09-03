@@ -1,40 +1,20 @@
+#if DEBUG
 import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Paste or drop a transcript, and turn it into notes.
-///
-/// Meeting capture does not exist yet, so this page is how the notes layer is
-/// driven and tested. When meetings arrive it keeps its place as the way to make
-/// notes from a transcript Yazar did not record.
-struct NotesSettingsView: View {
-    @Bindable var settings: Settings
-    @Bindable var composer: NotesComposer
+/// Development surface for making meeting notes from an imported transcript.
+struct TranscriptNotesSection: View {
+    @State private var composer: NotesComposer
     @State private var isTargeted = false
+
+    init(settings: Settings, store: MeetingStore) {
+        _composer = State(wrappedValue: NotesComposer(settings: settings, store: store))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            SettingsSection("Notes") {
-                SettingsRow(
-                    "Model",
-                    description: "OpenRouter model that writes the notes. Uses the same API key as transcription."
-                ) {
-                    TextField("Required", text: $settings.openRouterNotesModel)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 220)
-                }
-
-                RowDivider()
-
-                SettingsRow(
-                    "Privacy",
-                    description: "The whole transcript is sent to OpenRouter to make notes. Nothing is generated on this Mac."
-                ) {
-                    EmptyView()
-                }
-            }
-
-            SettingsSection("Transcript") {
+            SettingsSection("Development") {
                 VStack(alignment: .leading, spacing: 10) {
                     transcriptEditor
 
@@ -108,8 +88,8 @@ struct NotesSettingsView: View {
                 NotesView(notes: notes)
 
                 if !notes.isEmpty {
-                    // Copying is not the only way out any more — generating also
-                    // files the result under Meetings — but it stays the quickest.
+                    // Copying is not the only way out: generating also files the
+                    // result under Meetings, but copying stays the quickest.
                     Button("Copy as Markdown") {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(notes.markdown, forType: .string)
@@ -130,3 +110,4 @@ struct NotesSettingsView: View {
         composer.load(contentsOf: url)
     }
 }
+#endif

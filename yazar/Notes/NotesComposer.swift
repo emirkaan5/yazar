@@ -1,7 +1,8 @@
+#if DEBUG
 import Foundation
 import Observation
 
-/// Owns one transcript and the notes made from it.
+/// Owns one imported development transcript and the notes made from it.
 ///
 /// Shaped after `Yazar`: a state enum the view reads, one cancellable task, and
 /// no view-facing wording beyond what a failure already carries.
@@ -80,9 +81,8 @@ final class NotesComposer {
         }
     }
 
-    /// Files the result under Meetings. Generating is the only way a transcript
-    /// enters the library until capture exists, so it saves rather than offering
-    /// to: notes the user waited for should not be lost by closing a window.
+    /// Files the result under Meetings so notes the developer waited for survive
+    /// closing the settings window. Regeneration updates the same meeting.
     private func file(_ notes: Notes) {
         let id = savedMeetingID ?? UUID()
         savedMeetingID = id
@@ -116,3 +116,4 @@ final class NotesComposer {
         }
     }
 }
+#endif

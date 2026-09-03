@@ -27,15 +27,17 @@ struct SystemAccessSettingsView: View {
                     action: permissions.requestAccessibility
                 )
 
-                RowDivider()
+                if settings.meetingsEnabled {
+                    RowDivider()
 
-                PermissionRow(
-                    "Screen Recording",
-                    description: "Lets Yazar hear a meeting. Only needed for meeting notes, not dictation.",
-                    granted: permissions.screenRecordingGranted,
-                    actionTitle: "Request",
-                    action: permissions.requestScreenRecording
-                )
+                    PermissionRow(
+                        "Screen Recording",
+                        description: "Lets Yazar hear a meeting. Only needed for meeting notes, not dictation.",
+                        granted: permissions.screenRecordingGranted,
+                        actionTitle: "Request",
+                        action: permissions.requestScreenRecording
+                    )
+                }
             }
 
             // Only in the way when the Globe key is the dictation key.

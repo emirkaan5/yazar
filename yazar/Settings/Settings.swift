@@ -12,6 +12,7 @@ final class Settings {
         static let language = "language"
         static let playSounds = "playSounds"
         static let showRecordingTimer = "showRecordingTimer"
+        static let meetingsEnabled = "meetingsEnabled"
         static let soundTheme = "soundTheme"
         static let audioInputID = "audioInputID"
         static let dictationTrigger = "dictationTrigger"
@@ -51,6 +52,12 @@ final class Settings {
 
     var showRecordingTimer: Bool {
         didSet { defaults.set(showRecordingTimer, forKey: Key.showRecordingTimer) }
+    }
+
+    /// Meeting recording is opt-in: it needs Screen Recording and writes audio
+    /// to disk, neither of which a dictation-only user should be asked for.
+    var meetingsEnabled: Bool {
+        didSet { defaults.set(meetingsEnabled, forKey: Key.meetingsEnabled) }
     }
 
     var soundTheme: SoundTheme {
@@ -116,6 +123,7 @@ final class Settings {
         showRecordingTimer = defaults.object(forKey: Key.showRecordingTimer) == nil
             ? true
             : defaults.bool(forKey: Key.showRecordingTimer)
+        meetingsEnabled = defaults.bool(forKey: Key.meetingsEnabled)
         soundTheme = defaults.string(forKey: Key.soundTheme)
             .flatMap(SoundTheme.init(rawValue:))
             ?? .minimal
