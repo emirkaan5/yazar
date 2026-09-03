@@ -61,7 +61,6 @@ final class MeetingSession {
     private let notesMaker: MeetingNotesMaker
     private let recorder = SystemAudioRecorder()
     private var audioFile: MeetingAudioFile?
-    private var audioContinuation: AsyncStream<Data>.Continuation?
     private var transcriptionTask: Task<Void, Never>?
     private var finalizeTask: Task<Void, Never>?
     private var activity: (any NSObjectProtocol)?
@@ -72,11 +71,6 @@ final class MeetingSession {
         self.store = store
         self.settings = settings
         self.notesMaker = notesMaker
-        recorder.onUnexpectedStop = { [weak self] error in
-            Task { @MainActor [weak self] in
-                self?.finish(reason: .interrupted, failure: error.localizedDescription)
-            }
-        }
     }
 
     /// Whether audio is still being captured.
@@ -110,24 +104,26 @@ final class MeetingSession {
         subject.state = .recording
         subject.transcriptionFailure = nil
 
-        let (audio, continuation) = AsyncStream.makeStream(of: Data.self)
+        let audio: MeetingAudio
         do {
             let file = try MeetingAudioFile(url: try store.audioURL(for: subject))
             audioFile = file
+            audio = MeetingAudio(source: .tail(file.url, at: Int(file.byteCount), file: file))
             // The file already holds every earlier segment, so where it ends is
             // where this one starts.
             subject.segments.append(
                 MeetingSegment(startedAt: Date(), audioStart: Int(file.byteCount))
             )
-            audioContinuation = continuation
-            recorder.onSamples = { samples in continuation.yield(samples) }
             // Written before capture starts so a crash during startup still
             // leaves a record for the launch scan to find.
             store.save(subject)
             activeMeetingID = subject.id
-            try await recorder.start(writingTo: file)
+            try await recorder.start(writingTo: file) { [weak self] error in
+                Task { @MainActor [weak self] in
+                    self?.finish(reason: .interrupted, failure: error.localizedDescription)
+                }
+            }
         } catch {
-            stopFeedingTranscriber()
             audioFile?.close()
             audioFile = nil
             activeMeetingID = nil
@@ -173,7 +169,7 @@ final class MeetingSession {
     /// instead of stopping the meeting: the audio is being written either way,
     /// and losing an hour of recording because a request failed would be the
     /// worse trade.
-    private func startTranscribing(_ audio: AsyncStream<Data>) {
+    private func startTranscribing(_ audio: MeetingAudio) {
         let transcriber = settings.transcriptionProvider.makeTranscriber(settings)
         let language = settings.optionalLanguage
         liveTranscript = ""
@@ -187,25 +183,14 @@ final class MeetingSession {
                     liveVolatileText = update.volatile
                 }
             } catch is CancellationError {
-                // Falls through: the audio stream still needs closing.
+                return
             } catch {
                 // Logged as well as shown. A meeting is long, and the window
                 // that displays this may not have been open when it happened.
                 NSLog("Yazar could not transcribe a meeting: %@", error.localizedDescription)
                 self?.transcriptionFailure = error.localizedDescription
             }
-            // Nothing is reading the audio stream once this returns, and the
-            // recorder would otherwise buffer the rest of the meeting into it.
-            self?.stopFeedingTranscriber()
         }
-    }
-
-    /// Ends the flow of samples to the transcriber, which is also what makes it
-    /// finalize. Safe to call twice; the second call finds nothing to close.
-    private func stopFeedingTranscriber() {
-        recorder.onSamples = nil
-        audioContinuation?.finish()
-        audioContinuation = nil
     }
 
     /// Closes the current segment and files the meeting.
@@ -223,7 +208,6 @@ final class MeetingSession {
         let endOffset = audioFile.map { Int($0.byteCount) }
         audioFile?.close()
         audioFile = nil
-        stopFeedingTranscriber()
         elapsed = 0
 
         guard let id = activeMeetingID else {

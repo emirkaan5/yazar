@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 
 /// Append-only store for one meeting's audio, in Yazar's canonical 16 kHz mono
 /// signed 16-bit PCM.
@@ -8,23 +9,37 @@ import Foundation
 /// shorter recording rather than a corrupt one. WAV framing stays a
 /// transcription- and export-time concern, where `Recording.wavData` already
 /// builds it on demand.
-nonisolated final class MeetingAudioFile {
+/// The handle stays on the capture queue during recording. `written` and
+/// `finished` are the only state readers touch across threads.
+nonisolated final class MeetingAudioFile: @unchecked Sendable {
     let url: URL
     private let handle: FileHandle
+    private let written: Atomic<Int>
+    private let finished = Atomic(false)
 
     init(url: URL) throws {
         self.url = url
         if !FileManager.default.fileExists(atPath: url.path) {
             try Data().write(to: url)
         }
-        handle = try FileHandle(forWritingTo: url)
-        try handle.seekToEnd()
+        let handle = try FileHandle(forWritingTo: url)
+        let size = try handle.seekToEnd()
+        self.handle = handle
+        written = Atomic(Int(size))
     }
 
-    /// The handle sits at the end after opening and after every write, so its
-    /// offset is the length without a stat call.
+    /// Published after each successful write, so readers never run ahead of the
+    /// file and nobody else needs to touch the writer's handle.
     var byteCount: UInt64 {
-        (try? handle.offset()) ?? 0
+        UInt64(availableBytes)
+    }
+
+    var availableBytes: Int {
+        written.load(ordering: .acquiring)
+    }
+
+    var isFinished: Bool {
+        finished.load(ordering: .acquiring)
     }
 
     /// Seconds of audio written so far, derived from the file's size because raw
@@ -36,6 +51,7 @@ nonisolated final class MeetingAudioFile {
     func append(_ samples: Data) throws {
         guard !samples.isEmpty else { return }
         try handle.write(contentsOf: samples)
+        written.store(availableBytes + samples.count, ordering: .releasing)
     }
 
     /// Flushes to disk. Called at segment boundaries so a crash costs at most
@@ -47,5 +63,6 @@ nonisolated final class MeetingAudioFile {
     func close() {
         try? handle.synchronize()
         try? handle.close()
+        finished.store(true, ordering: .releasing)
     }
 }

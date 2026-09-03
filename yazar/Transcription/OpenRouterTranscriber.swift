@@ -25,14 +25,14 @@ nonisolated struct OpenRouterTranscriber: Transcriber {
     /// contract. Chunk boundaries also lose the context either side of them,
     /// which is the price of not waiting until the meeting ends to see anything.
     func transcribe(
-        _ audio: AsyncStream<Data>,
+        _ audio: MeetingAudio,
         language: String?
     ) -> AsyncThrowingStream<TranscriptUpdate, any Error> {
         AsyncThrowingStream { continuation in
             let work = Task {
                 var chunker = AudioChunker()
                 do {
-                    for await samples in audio {
+                    for try await samples in audio {
                         for chunk in chunker.append(samples) {
                             try await send(chunk, language: language, to: continuation)
                         }

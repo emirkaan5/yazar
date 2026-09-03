@@ -12,11 +12,8 @@ nonisolated struct AppleSpeechTranscriber: Transcriber {
     func transcribe(_ recording: Recording, language: String?) async throws -> String {
         guard !recording.pcm16.isEmpty else { return "" }
 
-        let (audio, continuation) = AsyncStream.makeStream(of: Data.self)
-        continuation.yield(recording.pcm16)
-        continuation.finish()
-
         var text = ""
+        let audio = MeetingAudio(source: .buffer(recording.pcm16))
         for try await update in stream(audio, language: language, preset: .transcription) {
             text += update.finalized
         }
@@ -29,7 +26,7 @@ nonisolated struct AppleSpeechTranscriber: Transcriber {
     /// Live transcription for a meeting, which uses the progressive preset so the
     /// window can show the sentence being spoken rather than only settled text.
     func transcribe(
-        _ audio: AsyncStream<Data>,
+        _ audio: MeetingAudio,
         language: String?
     ) -> AsyncThrowingStream<TranscriptUpdate, any Error> {
         stream(audio, language: language, preset: .progressiveTranscription)
@@ -42,7 +39,7 @@ nonisolated struct AppleSpeechTranscriber: Transcriber {
     /// input, forwarding republishes the module's results, and the analyzer
     /// itself sits between the two until the input sequence ends.
     private func stream(
-        _ audio: AsyncStream<Data>,
+        _ audio: MeetingAudio,
         language: String?,
         preset: SpeechTranscriber.Preset
     ) -> AsyncThrowingStream<TranscriptUpdate, any Error> {
@@ -76,7 +73,7 @@ nonisolated struct AppleSpeechTranscriber: Transcriber {
                                 // finished on every way out, a conversion that
                                 // threw included.
                                 defer { inputBuilder.finish() }
-                                for await samples in audio {
+                                for try await samples in audio {
                                     if let buffer = try converter.convert(samples) {
                                         inputBuilder.yield(AnalyzerInput(buffer: buffer))
                                     }

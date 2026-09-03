@@ -11,10 +11,6 @@ import Observation
 @MainActor
 @Observable
 final class MeetingTranscriptMaker {
-    /// One second of canonical audio, near enough to the runs `SCStream`
-    /// produces that the provider sees the same shape either way.
-    private nonisolated static let readSize = Recording.sampleRate * MemoryLayout<Int16>.size
-
     private let store: MeetingStore
     private let settings: Settings
     private let notesMaker: MeetingNotesMaker
@@ -99,35 +95,13 @@ final class MeetingTranscriptMaker {
         with transcriber: any Transcriber,
         language: String?
     ) async throws -> String {
-        let (audio, continuation) = AsyncStream.makeStream(of: Data.self)
-        // Detached because the reads are blocking and this type is main-actor
-        // bound. The handle is opened and closed inside the task, so nothing
-        // else can be holding it when the task is cancelled.
-        let feeding = Task.detached { () throws in
-            let handle = try FileHandle(forReadingFrom: url)
-            defer {
-                try? handle.close()
-                continuation.finish()
-            }
-            try handle.seek(toOffset: UInt64(range.lowerBound))
-            var remaining = range.count
-            while remaining > 0, !Task.isCancelled {
-                guard let data = try handle.read(upToCount: min(remaining, readSize)),
-                      !data.isEmpty else { return }
-                continuation.yield(data)
-                remaining -= data.count
-            }
-        }
-        defer { feeding.cancel() }
-
         var text = ""
+        let audio = MeetingAudio(source: .range(url, range))
         for try await update in transcriber.transcribe(audio, language: language) {
             text += update.finalized
         }
-        // Awaited after the transcript: a file that could not be read produces
-        // an empty transcript rather than an error, and this is what tells the
-        // two apart.
-        try await feeding.value
+        // The reader throws into the consuming loop, so an unreadable file and
+        // an empty transcript remain distinct outcomes.
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 

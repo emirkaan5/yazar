@@ -34,15 +34,6 @@ enum SystemAudioRecorderError: LocalizedError {
 /// Sample delivery is not main-actor work and lands on `captureQueue`, which is
 /// the only place the sink and the file are touched.
 nonisolated final class SystemAudioRecorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sendable {
-    /// Reports a capture that ended on its own. Set before starting; called on
-    /// the capture queue, so hop before touching anything isolated.
-    var onUnexpectedStop: (@Sendable (SystemAudioRecorderError) -> Void)?
-
-    /// Hands over canonical PCM as it is captured, in the same runs that go to
-    /// the file, so a transcriber hears the meeting while it is happening rather
-    /// than reading the file back afterwards. Called on the capture queue.
-    var onSamples: (@Sendable (Data) -> Void)?
-
     private let captureQueue = DispatchQueue(label: "yazar.meeting.samples")
     private let sink = CaptureSink()
     private let capturing = Atomic(false)
@@ -50,11 +41,16 @@ nonisolated final class SystemAudioRecorder: NSObject, SCStreamOutput, SCStreamD
 
     private var stream: SCStream?
     private var audioFile: MeetingAudioFile?
+    /// Capture-queue state. Callers install and clear it through a queue barrier.
+    private var onUnexpectedStop: (@Sendable (SystemAudioRecorderError) -> Void)?
 
     /// Opens `file` and starts capture. The shareable-content query is also what
     /// prompts for Screen Recording the first time, so permission is asked for
     /// at the moment a meeting starts rather than during onboarding.
-    func start(writingTo file: MeetingAudioFile) async throws {
+    func start(
+        writingTo file: MeetingAudioFile,
+        onUnexpectedStop: @escaping @Sendable (SystemAudioRecorderError) -> Void
+    ) async throws {
         let content: SCShareableContent
         do {
             content = try await SCShareableContent.excludingDesktopWindows(
@@ -92,6 +88,7 @@ nonisolated final class SystemAudioRecorder: NSObject, SCStreamOutput, SCStreamD
         captureQueue.sync {
             sink.reset()
             audioFile = file
+            self.onUnexpectedStop = onUnexpectedStop
         }
         writeFailed.store(false, ordering: .relaxed)
         capturing.store(true, ordering: .sequentiallyConsistent)
@@ -100,7 +97,10 @@ nonisolated final class SystemAudioRecorder: NSObject, SCStreamOutput, SCStreamD
             try await stream.startCapture()
         } catch {
             capturing.store(false, ordering: .sequentiallyConsistent)
-            captureQueue.sync { audioFile = nil }
+            captureQueue.sync {
+                audioFile = nil
+                self.onUnexpectedStop = nil
+            }
             throw SystemAudioRecorderError.captureSetupFailed
         }
         self.stream = stream
@@ -119,6 +119,7 @@ nonisolated final class SystemAudioRecorder: NSObject, SCStreamOutput, SCStreamD
             flushLocked()
             audioFile?.synchronize()
             audioFile = nil
+            onUnexpectedStop = nil
         }
     }
 
@@ -136,6 +137,7 @@ nonisolated final class SystemAudioRecorder: NSObject, SCStreamOutput, SCStreamD
             flushLocked()
             audioFile?.synchronize()
             audioFile = nil
+            onUnexpectedStop = nil
         }
         if let stream {
             Task.detached { try? await stream.stopCapture() }
@@ -209,7 +211,9 @@ nonisolated final class SystemAudioRecorder: NSObject, SCStreamOutput, SCStreamD
 
     nonisolated func stream(_ stream: SCStream, didStopWithError error: Error) {
         guard capturing.exchange(false, ordering: .sequentiallyConsistent) else { return }
-        onUnexpectedStop?(.stoppedUnexpectedly(error.localizedDescription))
+        let callback = onUnexpectedStop
+        onUnexpectedStop = nil
+        callback?(.stoppedUnexpectedly(error.localizedDescription))
     }
 
     /// Must be called on `captureQueue`.
@@ -224,8 +228,5 @@ nonisolated final class SystemAudioRecorder: NSObject, SCStreamOutput, SCStreamD
             writeFailed.store(true, ordering: .relaxed)
             return
         }
-        // Only what was kept is handed on, so the transcript never describes
-        // audio the file does not have.
-        onSamples?(samples)
     }
 }
