@@ -8,8 +8,8 @@ struct TranscriptNotesSection: View {
     @State private var composer: NotesComposer
     @State private var isTargeted = false
 
-    init(settings: Settings, store: MeetingStore) {
-        _composer = State(wrappedValue: NotesComposer(settings: settings, store: store))
+    init(settings: Settings, store: MeetingStore, engine: LocalLLMEngine) {
+        _composer = State(wrappedValue: NotesComposer(settings: settings, store: store, engine: engine))
     }
 
     var body: some View {

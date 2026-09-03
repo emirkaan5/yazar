@@ -10,6 +10,7 @@ struct YazarView: View {
     let yazar: Yazar
     let store: MeetingStore
     let session: MeetingSession
+    @Bindable var localLLM: LocalLLMEngine
     @Binding private var selection: AppPage
 
     init(
@@ -18,6 +19,7 @@ struct YazarView: View {
         yazar: Yazar,
         store: MeetingStore,
         session: MeetingSession,
+        localLLM: LocalLLMEngine,
         selection: Binding<AppPage> = .constant(.dictation)
     ) {
         self.settings = settings
@@ -25,6 +27,7 @@ struct YazarView: View {
         self.yazar = yazar
         self.store = store
         self.session = session
+        self.localLLM = localLLM
         _selection = selection
     }
 
@@ -53,8 +56,11 @@ struct YazarView: View {
                         MeetingsSettingsView(
                             settings: settings,
                             store: store,
-                            session: session
+                            session: session,
+                            localLLM: localLLM
                         )
+                    case .localModels:
+                        LocalModelsSettingsView(settings: settings, engine: localLLM)
                     case .systemAccess:
                         SystemAccessSettingsView(
                             permissions: permissions,
@@ -81,12 +87,14 @@ struct YazarView: View {
 #Preview {
     let settings = Settings()
     let store = MeetingStore()
-    let notesMaker = MeetingNotesMaker(store: store, settings: settings)
+    let engine = LocalLLMEngine()
+    let notesMaker = MeetingNotesMaker(store: store, settings: settings, engine: engine)
     YazarView(
         settings: settings,
         permissions: Permissions(),
         yazar: Yazar(settings: settings),
         store: store,
-        session: MeetingSession(store: store, settings: settings, notesMaker: notesMaker)
+        session: MeetingSession(store: store, settings: settings, notesMaker: notesMaker),
+        localLLM: engine
     )
 }

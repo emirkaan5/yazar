@@ -5,6 +5,7 @@ enum AppPage: CaseIterable, Identifiable {
     case transcription
     case formatting
     case meetings
+    case localModels
     case systemAccess
 
     var id: Self { self }
@@ -15,6 +16,7 @@ enum AppPage: CaseIterable, Identifiable {
         case .transcription: "Transcription"
         case .formatting: "Formatting"
         case .meetings: "Meetings"
+        case .localModels: "Local Models"
         case .systemAccess: "System Access"
         }
     }
@@ -25,6 +27,7 @@ enum AppPage: CaseIterable, Identifiable {
         case .transcription: "text.bubble"
         case .formatting: "textformat"
         case .meetings: "person.2.wave.2"
+        case .localModels: "cpu"
         case .systemAccess: "lock.shield"
         }
     }

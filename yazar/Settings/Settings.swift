@@ -9,6 +9,8 @@ final class Settings {
         static let transcriptionProvider = "transcriptionProvider"
         static let model = "model"
         static let notesModel = "notesModel"
+        static let languageModelProvider = "languageModelProvider"
+        static let localModel = "localModel"
         static let language = "language"
         static let playSounds = "playSounds"
         static let showRecordingTimer = "showRecordingTimer"
@@ -41,6 +43,19 @@ final class Settings {
     /// because that one transcribes audio and the two are never the same model.
     var openRouterNotesModel: String {
         didSet { defaults.set(openRouterNotesModel, forKey: Key.notesModel) }
+    }
+
+    /// Which engine writes the notes. `openRouterNotesModel` and `localModel`
+    /// are both kept regardless of this, so switching back and forth does not
+    /// lose either choice.
+    var languageModelProvider: LanguageModelProvider {
+        didSet { defaults.set(languageModelProvider.rawValue, forKey: Key.languageModelProvider) }
+    }
+
+    /// The Hugging Face repo id run by the local engine when
+    /// `languageModelProvider` is `.local`.
+    var localModel: String {
+        didSet { defaults.set(localModel, forKey: Key.localModel) }
     }
 
     /// Raw text-field contents. `optionalLanguage` is the canonical reading of
@@ -121,6 +136,10 @@ final class Settings {
         openRouterModel = defaults.string(forKey: Key.model) ?? "openai/whisper-1"
         openRouterNotesModel = defaults.string(forKey: Key.notesModel)
             ?? "nvidia/nemotron-3-ultra-550b-a55b:free"
+        languageModelProvider = defaults.string(forKey: Key.languageModelProvider)
+            .flatMap(LanguageModelProvider.init(rawValue:))
+            ?? .openRouter
+        localModel = defaults.string(forKey: Key.localModel) ?? SuggestedLocalModel.defaultID
         language = defaults.string(forKey: Key.language) ?? ""
         playSounds = defaults.object(forKey: Key.playSounds) == nil
             ? true

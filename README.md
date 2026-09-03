@@ -14,6 +14,7 @@ I built it because the options I found were heavy Electron apps, paid, or both. 
 - Automatic text insertion into the active app, with every transcription kept on the clipboard
 - Context-aware capitalization, punctuation, and spacing around the caret or selection
 - On-device transcription with Apple Speech
+- On-device meeting notes with a local mlx-lm model, installed on demand
 - Configurable OpenRouter transcription models
 - Selectable transcription language and provider
 - Selectable audio input and status sound themes
@@ -33,6 +34,8 @@ Yazar reads the active text field through macOS Accessibility and fits each tran
 Apple Speech processes recordings on your Mac. macOS may download the selected language asset into system storage the first time you use it and manages later model updates. Yazar does not write dictation recordings to disk. Meeting capture writes its audio to disk while it is still needed for transcription and removes it after transcription succeeds.
 
 When you select OpenRouter, Yazar sends each recording directly to OpenRouter for transcription. Your API key stays in the macOS Keychain.
+
+Meeting notes are written by OpenRouter by default, which uploads the whole transcript. Settings → Local Models switches that to a model that runs entirely on this Mac, so the transcript never leaves it. The first time you enable it, Yazar downloads a self-contained Python runtime and `mlx-lm` (about 350 MB) into Application Support; the model itself downloads separately on first use. Removing it is deleting a folder.
 
 
 ## Requirements

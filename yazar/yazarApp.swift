@@ -40,6 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let permissions = Permissions()
     private let yazar: Yazar
     private let store: MeetingStore
+    private let localLLM = LocalLLMEngine()
     private let session: MeetingSession
     private let notesMaker: MeetingNotesMaker
     private let transcriptMaker: MeetingTranscriptMaker
@@ -54,7 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         yazar = Yazar(settings: settings)
         let store = MeetingStore()
         self.store = store
-        let notesMaker = MeetingNotesMaker(store: store, settings: settings)
+        let notesMaker = MeetingNotesMaker(store: store, settings: settings, engine: localLLM)
         self.notesMaker = notesMaker
         let session = MeetingSession(store: store, settings: settings, notesMaker: notesMaker)
         self.session = session
@@ -169,6 +170,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         yazar.stop()
         session.endForTermination()
+        localLLM.shutdown()
     }
 
     func showMeetings() {
@@ -233,6 +235,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 yazar: yazar,
                 store: store,
                 session: session,
+                localLLM: localLLM,
                 selection: Binding(
                     get: { [weak self] in self?.selectedPage ?? .dictation },
                     set: { [weak self] in self?.selectedPage = $0 }

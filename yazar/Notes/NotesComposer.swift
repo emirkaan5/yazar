@@ -35,14 +35,16 @@ final class NotesComposer {
 
     private let settings: Settings
     private let store: MeetingStore
+    private let engine: LocalLLMEngine
     private var task: Task<Void, Never>?
     /// Set once a transcript has been filed, so regenerating updates that
     /// meeting instead of leaving a duplicate behind.
     private var savedMeetingID: UUID?
 
-    init(settings: Settings, store: MeetingStore) {
+    init(settings: Settings, store: MeetingStore, engine: LocalLLMEngine) {
         self.settings = settings
         self.store = store
+        self.engine = engine
     }
 
     var hasTranscript: Bool {
@@ -55,19 +57,17 @@ final class NotesComposer {
 
     func generate() {
         guard canGenerate else { return }
-        let maker = OpenRouterNoteMaker(
-            client: OpenRouterClient(
-                apiKey: settings.apiKey(for: .openRouter),
-                model: settings.openRouterNotesModel
-            )
-        )
+        let provider = settings.languageModelProvider
+        let settings = settings
+        let engine = engine
         let transcript = transcript
         notes = nil
         state = .working
         task?.cancel()
         task = Task { [weak self] in
             do {
-                let notes = try await maker.makeNotes(from: transcript)
+                let client = try await provider.makeClient(settings: settings, engine: engine)
+                let notes = try await OpenRouterNoteMaker(client: client).makeNotes(from: transcript)
                 try Task.checkCancellation()
                 self?.notes = notes
                 self?.state = .idle

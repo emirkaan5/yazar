@@ -13,15 +13,17 @@ import Observation
 final class MeetingNotesMaker {
     private let store: MeetingStore
     private let settings: Settings
+    private let engine: LocalLLMEngine
     private var tasks: [UUID: Task<Void, Never>] = [:]
     /// Why the last attempt failed, per meeting. Kept here rather than in the
     /// record because it describes an attempt, not the meeting, and the answer
     /// to it is to try again.
     private(set) var failures: [UUID: String] = [:]
 
-    init(store: MeetingStore, settings: Settings) {
+    init(store: MeetingStore, settings: Settings, engine: LocalLLMEngine) {
         self.store = store
         self.settings = settings
+        self.engine = engine
     }
 
     func isWorking(on id: UUID) -> Bool {
@@ -38,18 +40,16 @@ final class MeetingNotesMaker {
         else { return }
 
         let transcript = meeting.transcript
-        let maker = OpenRouterNoteMaker(
-            client: OpenRouterClient(
-                apiKey: settings.apiKey(for: .openRouter),
-                model: settings.openRouterNotesModel
-            )
-        )
+        let provider = settings.languageModelProvider
+        let settings = settings
+        let engine = engine
         failures[id] = nil
 
         tasks[id] = Task { [weak self] in
             let result: Result<Notes, any Error>
             do {
-                result = .success(try await maker.makeNotes(from: transcript))
+                let client = try await provider.makeClient(settings: settings, engine: engine)
+                result = .success(try await OpenRouterNoteMaker(client: client).makeNotes(from: transcript))
             } catch {
                 result = .failure(error)
             }
