@@ -47,6 +47,8 @@ struct YazarView: View {
                         DictationSettingsView(settings: settings, yazar: yazar)
                     case .transcription:
                         TranscriptionSettingsView(settings: settings)
+                    case .formatting:
+                        FormattingSettingsView(formatting: settings.formatting)
                     case .meetings:
                         MeetingsSettingsView(
                             settings: settings,

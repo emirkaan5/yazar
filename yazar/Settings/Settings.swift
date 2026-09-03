@@ -23,6 +23,10 @@ final class Settings {
 
     private let defaults: UserDefaults
 
+    /// Formatting owns a growing collection rather than a scalar, so it
+    /// keeps its own store and invariants and shares this one's defaults.
+    let formatting: FormattingSettings
+
     var transcriptionProvider: TranscriptionProvider {
         didSet {
             defaults.set(transcriptionProvider.rawValue, forKey: Key.transcriptionProvider)
@@ -110,6 +114,7 @@ final class Settings {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        formatting = FormattingSettings(defaults: defaults)
         transcriptionProvider = defaults.string(forKey: Key.transcriptionProvider)
             .flatMap(TranscriptionProvider.init(rawValue:))
             ?? .openRouter
