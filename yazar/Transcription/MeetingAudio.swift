@@ -67,8 +67,14 @@ nonisolated struct MeetingAudio: AsyncSequence, Sendable {
                     return data
 
                 case .tail(let url, _, let file):
-                    while offset >= file.availableBytes {
-                        if file.isFinished {
+                    while true {
+                        // The flag is read first on purpose. A byte count read
+                        // first can be stale by the time the flag says nothing
+                        // more is coming, which would end the read with the
+                        // last buffer of the meeting still unread.
+                        let finished = file.isFinished
+                        if offset < file.availableBytes { break }
+                        if finished {
                             close()
                             return nil
                         }

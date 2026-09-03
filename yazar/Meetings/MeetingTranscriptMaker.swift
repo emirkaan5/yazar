@@ -80,10 +80,10 @@ final class MeetingTranscriptMaker {
         meeting.transcriptionFailure = failure
         store.save(meeting)
 
-        if failure == nil {
-            store.deleteAudio(for: meeting)
-        }
+        // Deleted only after the audio has produced a transcript, so a run
+        // that succeeded and returned nothing can still be retried.
         guard failure == nil, !meeting.transcript.isEmpty else { return }
+        store.deleteAudio(for: meeting)
         notesMaker.make(for: id)
     }
 

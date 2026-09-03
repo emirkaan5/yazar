@@ -249,7 +249,10 @@ final class MeetingSession {
             // and offer to transcribe the audio again.
             meeting.transcriptionFailure = transcriptionFailure
             store.save(meeting)
-            if transcriptionFailure == nil {
+            // Audio goes only once it has produced something. A provider that
+            // returns nothing raises no failure, and that is exactly when the
+            // recording is the only thing left to try again from.
+            if transcriptionFailure == nil, !meeting.transcript.isEmpty {
                 store.deleteAudio(for: meeting)
                 notesMaker.make(for: id)
             }
