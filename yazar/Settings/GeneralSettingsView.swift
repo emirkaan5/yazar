@@ -88,16 +88,6 @@ struct GeneralSettingsView: View {
                         .toggleStyle(.switch)
                         .controlSize(.small)
                 }
-
-                RowDivider()
-
-                SettingsRow(
-                    "Error mode",
-                    description: "Show the error state used when transcription fails."
-                ) {
-                    Button("Trigger error mode") { yazar.triggerDemoError() }
-                        .buttonStyle(.bordered)
-                }
             }
 #endif
         }

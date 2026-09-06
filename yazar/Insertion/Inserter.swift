@@ -16,13 +16,7 @@ enum Inserter {
     // The clipboard is the delivery guarantee. Command-V is a best-effort
     // convenience because CGEvent cannot report whether the target consumed it.
     static func insert(_ text: String) -> Outcome {
-        let pasteboard = NSPasteboard.general
-        let snapshot = ClipboardSnapshot(pasteboard)
-        pasteboard.clearContents()
-        guard pasteboard.setString(text, forType: .string) else {
-            snapshot.restore()
-            return .clipboardUnavailable
-        }
+        guard copy(text) == .delivered else { return .clipboardUnavailable }
         guard AXIsProcessTrusted(), CGPreflightPostEventAccess() else { return .delivered }
 
         let source = CGEventSource(stateID: .privateState)
@@ -34,6 +28,18 @@ enum Inserter {
         keyUp.flags = .maskCommand
         keyDown.post(tap: .cghidEventTap)
         keyUp.post(tap: .cghidEventTap)
+        return .delivered
+    }
+
+    /// Writes text without posting Command-V, for recovery after focus changed.
+    static func copy(_ text: String) -> Outcome {
+        let pasteboard = NSPasteboard.general
+        let snapshot = ClipboardSnapshot(pasteboard)
+        pasteboard.clearContents()
+        guard pasteboard.setString(text, forType: .string) else {
+            snapshot.restore()
+            return .clipboardUnavailable
+        }
         return .delivered
     }
 

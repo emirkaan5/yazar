@@ -12,6 +12,10 @@ struct YazarApp: App {
                 appDelegate.showApp()
             }
 
+            if appDelegate.hasDictationRecovery {
+                Button("Recover Dictation…") { appDelegate.showDictationRecovery() }
+            }
+
             if appDelegate.isMeetingsEnabled {
                 Button(appDelegate.meetingActionTitle) {
                     appDelegate.toggleMeeting()
@@ -79,9 +83,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var menuBarIcon: String {
         switch yazar.state {
         case .warmingUp, .recording: "waveform.circle.fill"
-        case .transcribing: "ellipsis.circle"
+        case .transcribing, .retrying: "ellipsis.circle"
         case .error: "exclamationmark.circle"
-        case .idle, .noSpeech: meetingIcon
+        case .recovered: "doc.on.clipboard"
+        case .idle, .noSpeech, .copied: meetingIcon
         }
     }
 
@@ -94,6 +99,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case .transcribing: "ellipsis.circle"
         case .idle, .failed: "waveform"
         }
+    }
+
+    var hasDictationRecovery: Bool { yazar.hasRecovery }
+
+    func showDictationRecovery() {
+        overlayPanel?.showRecovery()
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard yazar.hasRecovery else { return .terminateNow }
+        let alert = NSAlert()
+        alert.messageText = "Discard your unfinished dictation?"
+        alert.informativeText = "The recording or text is kept only in memory and will be lost when Yazar quits."
+        alert.addButton(withTitle: "Return to Dictation")
+        alert.addButton(withTitle: "Discard and Quit")
+        NSApp.activate()
+        if alert.runModal() == .alertSecondButtonReturn { return .terminateNow }
+        showDictationRecovery()
+        return .terminateCancel
     }
 
     var meetingActionTitle: String {
@@ -268,7 +292,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func startEngine() {
         permissions.stopPolling()
         if overlayPanel == nil {
-            overlayPanel = OverlayPanel(yazar: yazar, settings: settings)
+            overlayPanel = OverlayPanel(yazar: yazar, settings: settings) { [weak self] page in
+                self?.showApp(page: page)
+            }
         }
         do {
             try yazar.start()

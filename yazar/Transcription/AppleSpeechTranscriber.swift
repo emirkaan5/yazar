@@ -45,10 +45,10 @@ nonisolated struct AppleSpeechTranscriber: Transcriber {
             let work = Task {
                 do {
                     guard SpeechTranscriber.isAvailable else {
-                        throw AppleSpeechTranscriberError.unavailable
+                        throw TranscriptionFailure.unavailable
                     }
                     guard let locale = await Self.supportedLocale(for: language) else {
-                        throw AppleSpeechTranscriberError.unsupportedLanguage(
+                        throw TranscriptionFailure.unsupportedLanguage(
                             Self.displayName(for: language)
                         )
                     }
@@ -57,7 +57,7 @@ nonisolated struct AppleSpeechTranscriber: Transcriber {
                     guard let analyzerFormat = await SpeechAnalyzer.bestAvailableAudioFormat(
                         compatibleWith: [module]
                     ) else {
-                        throw AppleSpeechTranscriberError.unavailable
+                        throw TranscriptionFailure.unavailable
                     }
                     let converter = try PCMConverter(to: analyzerFormat)
 
@@ -187,19 +187,5 @@ nonisolated extension AppleSpeechTranscriber {
     /// A blank language setting means "whatever this Mac is set to".
     private static func requestedLocale(for language: String?) -> Locale {
         language.map(Locale.init(identifier:)) ?? .current
-    }
-}
-
-private enum AppleSpeechTranscriberError: LocalizedError {
-    case unavailable
-    case unsupportedLanguage(String)
-
-    var errorDescription: String? {
-        switch self {
-        case .unavailable:
-            "Apple Speech isn't available on this Mac."
-        case .unsupportedLanguage(let language):
-            "Apple Speech doesn't support \(language)."
-        }
     }
 }

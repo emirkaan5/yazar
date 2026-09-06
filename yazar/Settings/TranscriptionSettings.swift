@@ -106,6 +106,14 @@ final class TranscriptionSettings {
         modelsByInputSource[inputSourceID] = model
     }
 
+    /// Resolves a one-time provider choice without changing saved routing.
+    func model(for provider: TranscriptionProvider) -> TranscriptionModel {
+        switch provider {
+        case .appleSpeech: .appleSpeech
+        case .openRouter: .openRouter(openRouterModel)
+        }
+    }
+
     func setProvider(_ provider: TranscriptionProvider?, for inputSourceID: String) {
         switch provider {
         case nil:

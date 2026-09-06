@@ -8,9 +8,9 @@ final class OverlayPanel {
     private let panel: NSPanel
     private var hideTask: Task<Void, Never>?
 
-    init(yazar: Yazar, settings: Settings) {
+    init(yazar: Yazar, settings: Settings, openSettings: @escaping (AppPage) -> Void) {
         self.yazar = yazar
-        panel = NSPanel(
+        panel = DictationPanel(
             contentRect: NSRect(origin: .zero, size: OverlayView.panelSize),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
@@ -25,16 +25,28 @@ final class OverlayPanel {
         panel.backgroundColor = .clear
         panel.hasShadow = true
         panel.ignoresMouseEvents = true
-        let hostingView = NSHostingView(rootView: OverlayView(yazar: yazar, settings: settings))
+        let hostingView = NSHostingView(rootView: OverlayView(
+            yazar: yazar,
+            settings: settings,
+            openSettings: openSettings
+        ))
         hostingView.sizingOptions = []
         hostingView.autoresizingMask = [.width, .height]
         panel.contentView = hostingView
         observeState()
     }
 
+    /// A deliberate menu action may take focus; passive error presentation does not.
+    func showRecovery() {
+        yazar.isRecoveryHidden = false
+        updateVisibility()
+        if yazar.showsCard { panel.makeKeyAndOrderFront(nil) }
+    }
+
     private func observeState() {
         withObservationTracking {
             _ = yazar.state
+            _ = yazar.isRecoveryHidden
         } onChange: { [unowned self] in
             Task { @MainActor [unowned self] in
                 self.updateVisibility()
@@ -44,6 +56,12 @@ final class OverlayPanel {
     }
 
     private func updateVisibility() {
+        panel.ignoresMouseEvents = !yazar.showsCard
+        if yazar.isRecoveryHidden {
+            hideTask?.cancel()
+            panel.orderOut(nil)
+            return
+        }
         if yazar.state == .idle {
             hideTask?.cancel()
             hideTask = Task { @MainActor [weak self] in
