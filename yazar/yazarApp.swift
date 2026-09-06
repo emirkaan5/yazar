@@ -27,6 +27,12 @@ struct YazarApp: App {
                 }
             }
 
+#if DEBUG
+            Divider()
+
+            Button("Debug Panel…", action: appDelegate.showDebugPanel)
+#endif
+
             Divider()
 
             Button("Quit Yazar") {
@@ -51,6 +57,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var selectedPage = AppPage.general
     private var overlayPanel: OverlayPanel?
     private var appWindow: NSWindow?
+#if DEBUG
+    private var debugPanel: DebugPanelController?
+#endif
 
     override init() {
         let settings = Settings()
@@ -198,6 +207,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func showMeetings() {
         meetingsWindow.show()
     }
+
+#if DEBUG
+    func showDebugPanel() {
+        if debugPanel == nil {
+            debugPanel = DebugPanelController(yazar: yazar)
+        }
+        debugPanel?.show()
+    }
+#endif
 
     /// Hands off to the copy of Yazar already running and quits.
     ///
