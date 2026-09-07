@@ -72,7 +72,6 @@ struct YazarView: View {
                 .frame(maxWidth: 620, alignment: .topLeading)
                 .padding(20)
             }
-            .background(Color(nsColor: .windowBackgroundColor))
         }
         .frame(
             minWidth: Self.minimumSize.width,
@@ -80,6 +79,7 @@ struct YazarView: View {
             minHeight: Self.minimumSize.height,
             maxHeight: .infinity
         )
+        .background(WindowBackground())
         .ignoresSafeArea(.container)
     }
 }

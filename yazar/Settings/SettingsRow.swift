@@ -21,7 +21,9 @@ struct SettingsSection<Header: View, Content: View>: View {
             VStack(spacing: 0) {
                 content
             }
-            .background(Color(nsColor: .controlBackgroundColor))
+            // Partly transparent so the window's vibrancy carries through the
+            // card instead of the card sitting on it as a dark block.
+            .background(Color(nsColor: .controlBackgroundColor).opacity(0.4))
             .clipShape(RoundedRectangle(cornerRadius: 9))
             .overlay {
                 RoundedRectangle(cornerRadius: 9)

@@ -271,6 +271,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         window.title = "Yazar"
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
+        // The content view is one behind-window vibrancy layer; an opaque
+        // window backdrop would sit in front of the desktop it blurs.
+        window.isOpaque = false
+        window.backgroundColor = .clear
         window.isReleasedWhenClosed = false
         window.collectionBehavior.insert(.fullScreenNone)
         window.collectionBehavior.insert(.fullScreenDisallowsTiling)
