@@ -26,10 +26,12 @@ enum DictationFailure: Hashable {
         }
     }
 
+    /// Wrapped errors describe themselves. Only the clipboard failure is the
+    /// dictation layer's own, so it is the only sentence written here.
     var message: String {
         switch self {
-        case .recorder(let error): error.errorDescription ?? "Yazar could not record."
-        case .hotKey(let error): error.errorDescription ?? "Yazar can't watch the dictation key."
+        case .recorder(let error): error.localizedDescription
+        case .hotKey(let error): error.localizedDescription
         case .clipboardUnavailable: "Couldn't write to the clipboard."
         case .transcription(let failure): failure.localizedDescription
         }
