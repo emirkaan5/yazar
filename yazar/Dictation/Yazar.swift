@@ -40,7 +40,7 @@ final class Yazar {
     private(set) var recordingStartedAt: Date?
 
     private(set) var pendingDictation: PendingDictation?
-    var isRecoveryHidden = false
+    private(set) var isRecoveryHidden = false
     private let makeTranscriber: (TranscriptionRoute) -> any Transcriber
     private let insertText: @MainActor (String) -> Inserter.Outcome
     private let copyText: @MainActor (String) -> Inserter.Outcome
@@ -117,7 +117,7 @@ final class Yazar {
 
     private func pressed() {
         guard !hasRecovery else {
-            isRecoveryHidden = false
+            revealRecovery()
             return
         }
         switch state {
@@ -318,6 +318,11 @@ final class Yazar {
 
     func dismissRecovery() {
         isRecoveryHidden = true
+    }
+
+    /// Shows retained recovery without changing or discarding its payload.
+    func revealRecovery() {
+        isRecoveryHidden = false
     }
 
     /// Escape abandons an initial dictation, but cancelling a retry keeps audio.

@@ -38,7 +38,9 @@ final class OverlayPanel {
 
     /// A deliberate menu action may take focus; passive error presentation does not.
     func showRecovery() {
-        yazar.isRecoveryHidden = false
+        yazar.revealRecovery()
+        // Observation delivers its update on the next main-actor turn, but the
+        // panel must already accept mouse events when it is asked to become key.
         updateVisibility()
         if yazar.showsCard { panel.makeKeyAndOrderFront(nil) }
     }
