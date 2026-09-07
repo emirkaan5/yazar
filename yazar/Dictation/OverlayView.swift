@@ -57,7 +57,7 @@ struct OverlayView: View {
 
     private var surfaceSize: CGSize {
         let width: CGFloat = switch yazar.state {
-        case .retrying, .error, .recovered: DictationRecoveryView.width
+        case .retrying, .error, .recovery: DictationRecoveryView.width
         case .warmingUp, .recording: settings.showRecordingTimer ? 115 : 65
         case .noSpeech: 175
         case .copied: 210
@@ -90,7 +90,7 @@ struct OverlayView: View {
             Label("No speech detected", systemImage: "mic.slash")
         case .copied:
             Label("Copied — paste with ⌘V", systemImage: "checkmark")
-        case .retrying, .error, .recovered:
+        case .retrying, .error, .recovery:
             DictationRecoveryView(yazar: yazar, settings: settings, openSettings: openSettings)
         }
     }

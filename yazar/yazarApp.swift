@@ -94,7 +94,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case .warmingUp, .recording: "waveform.circle.fill"
         case .transcribing, .retrying: "ellipsis.circle"
         case .error: "exclamationmark.circle"
-        case .recovered: "doc.on.clipboard"
+        // Recovery offers one of two things, and the icon says which without
+        // opening the card: audio to retry, or text to copy.
+        case .recovery:
+            switch yazar.pendingDictation {
+            case .audio: "arrow.clockwise.circle"
+            case .text: "doc.on.clipboard"
+            case nil: meetingIcon
+            }
         case .idle, .noSpeech, .copied: meetingIcon
         }
     }

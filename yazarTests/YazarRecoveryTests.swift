@@ -42,7 +42,16 @@ struct YazarRecoveryTests {
         try await waitUntil { yazar.state == .error(.transcription(.timedOut)) }
         #expect(yazar.hasRecovery)
         yazar.dismissRecovery()
-        #expect(yazar.hasRecovery)
+        #expect(yazar.isRecoveryHidden)
+        yazar.revealRecovery()
+        // Hiding and re-showing is presentation only: the audio is still there,
+        // with the formatting rules it was captured under.
+        #expect(!yazar.isRecoveryHidden)
+        guard case .audio(let hidden, let hiddenRules, _) = yazar.pendingDictation else {
+            Issue.record("Expected retained audio"); return
+        }
+        #expect(hidden.pcm16 == audio.pcm16)
+        #expect(hiddenRules == [.lowercase])
 
         settings.transcription.language = "de"
         yazar.retry(using: .appleSpeech)
@@ -53,7 +62,7 @@ struct YazarRecoveryTests {
         yazar.retry(using: .openRouter("another/model"))
         try await waitUntil { await provider.recordings.count == 3 }
         await provider.reply(2, with: .success("HELLO THERE."))
-        try await waitUntil { yazar.state == .recovered }
+        try await waitUntil { yazar.state == .recovery }
 
         #expect(routes.map(\.language) == ["tr", "tr", "tr"])
         #expect(routes.map(\.model) == [.openRouter("original/model"), .appleSpeech, .openRouter("another/model")])
@@ -114,13 +123,17 @@ struct YazarRecoveryTests {
         yazar.retry(using: .appleSpeech)
         try await waitUntil { await provider.recordings.count == 2 }
         yazar.cancel()
-        #expect(yazar.hasRecovery)
-        #expect(yazar.state == .recovered)
+        #expect(yazar.state == .recovery)
+        // Cancelling a retry keeps the speech, so the card can offer it again.
+        guard case .audio(let retained, _, _) = yazar.pendingDictation else {
+            Issue.record("Expected retained audio"); return
+        }
+        #expect(retained.pcm16 == audio.pcm16)
         yazar.retry(using: .openRouter("new/model"))
         try await waitUntil { await provider.recordings.count == 3 }
         await provider.reply(1, with: .success("OLD"))
         await provider.reply(2, with: .success("NEW"))
-        try await waitUntil { yazar.state == .recovered }
+        try await waitUntil { yazar.state == .recovery }
         guard case .text(let text) = yazar.pendingDictation else {
             Issue.record("Expected text"); return
         }

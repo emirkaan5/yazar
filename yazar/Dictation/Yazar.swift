@@ -11,7 +11,9 @@ final class Yazar {
         case recording
         case transcribing
         case retrying
-        case recovered
+        /// Something is retained and waiting on the user. Which offer that is —
+        /// retry the audio, or copy the text — is `pendingDictation`'s to say.
+        case recovery
         case copied
         case noSpeech
         case error(DictationFailure)
@@ -27,7 +29,7 @@ final class Yazar {
             switch state {
             case .warmingUp, .recording, .transcribing, .retrying:
                 escapeHotKey.capture(true)
-            case .idle, .noSpeech, .error, .recovered, .copied:
+            case .idle, .noSpeech, .error, .recovery, .copied:
                 escapeHotKey.capture(false)
             }
         }
@@ -49,7 +51,7 @@ final class Yazar {
 
     var showsCard: Bool {
         switch state {
-        case .error, .retrying, .recovered: true
+        case .error, .retrying, .recovery: true
         default: false
         }
     }
@@ -125,7 +127,7 @@ final class Yazar {
             break
         case .noSpeech, .error, .copied:
             stateResetTask?.cancel()
-        case .warmingUp, .recording, .transcribing, .retrying, .recovered:
+        case .warmingUp, .recording, .transcribing, .retrying, .recovery:
             return
         }
 
@@ -146,7 +148,7 @@ final class Yazar {
         switch state {
         case .warmingUp, .recording:
             break
-        case .idle, .transcribing, .noSpeech, .error, .retrying, .recovered, .copied:
+        case .idle, .transcribing, .noSpeech, .error, .retrying, .recovery, .copied:
             return
         }
 
@@ -273,9 +275,11 @@ final class Yazar {
                 if !isRetry, let context {
                     result = TranscriptFitter.fit(result, to: context)
                 }
+                // A successful retry retains text instead of delivering it: the
+                // window it was dictated into is long gone.
                 pendingDictation = .text(result)
                 if isRetry {
-                    state = .recovered
+                    state = .recovery
                 } else {
                     switch insertText(result) {
                     case .delivered:
@@ -341,9 +345,10 @@ final class Yazar {
         case .retrying:
             transcriptionTask?.cancel()
             transcriptionTask = nil
-            state = .recovered
+            // Cancellation retains audio.
+            state = .recovery
             play(.cancel)
-        case .error, .recovered:
+        case .error, .recovery:
             dismissRecovery()
         case .idle, .noSpeech, .copied:
             return
