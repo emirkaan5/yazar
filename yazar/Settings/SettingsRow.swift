@@ -55,10 +55,12 @@ struct SettingsSectionTitle: View {
 
 struct SettingsRow<Control: View>: View {
     private let title: String
-    private let description: String
+    private let description: String?
     private let control: Control
 
-    init(_ title: String, description: String, @ViewBuilder control: () -> Control) {
+    /// A row without a description draws only its title, centred against the
+    /// control, so rows whose label needs no explanation stay compact.
+    init(_ title: String, description: String? = nil, @ViewBuilder control: () -> Control) {
         self.title = title
         self.description = description
         self.control = control()
@@ -69,10 +71,12 @@ struct SettingsRow<Control: View>: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.system(size: 13))
-                Text(description)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                if let description {
+                    Text(description)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
             Spacer(minLength: 8)
