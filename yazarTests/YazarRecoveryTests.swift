@@ -118,6 +118,9 @@ struct YazarRecoveryTests {
         try await waitUntil { yazar.state == .error(.transcription(.network)) }
         yazar.retry(using: .appleSpeech)
         try await waitUntil { await provider.recordings.count == 2 }
+        // A retry is audio the user already chose to keep, so it stays
+        // recoverable while it runs.
+        #expect(yazar.hasRecovery)
         yazar.cancel()
         #expect(yazar.state == .recovery)
         // Cancelling a retry keeps the speech, so the card can offer it again.
@@ -178,6 +181,10 @@ struct YazarRecoveryTests {
         let route = TranscriptionRoute(model: .appleSpeech, language: nil)
         yazar.transcribe(audio, rules: [], route: route)
         try await waitUntil { await provider.recordings.count == 1 }
+        // A first attempt retains audio so a failure has something to offer,
+        // but nothing has failed yet: the menu must not offer to recover it and
+        // quitting must not stop to ask about it.
+        #expect(!yazar.hasRecovery)
         await provider.reply(0, with: .success("  \n"))
         try await waitUntil { yazar.state == .error(.transcription(.emptyText)) }
         #expect(yazar.hasRecovery)

@@ -47,14 +47,20 @@ final class Yazar {
     private let insertText: @MainActor (String) -> Inserter.Outcome
     private let copyText: @MainActor (String) -> Inserter.Outcome
 
-    var hasRecovery: Bool { pendingDictation != nil }
-
+    /// Whether the overlay is showing the recovery card rather than plain
+    /// dictation progress.
     var showsCard: Bool {
         switch state {
         case .error, .retrying, .recovery: true
         default: false
         }
     }
+
+    /// Whether the card holds something the user can still act on or lose. This
+    /// is what the menu offers and what quitting warns about, so a first attempt
+    /// does not count: it retains audio, but nothing has failed and nothing is
+    /// on offer until it does.
+    var hasRecovery: Bool { pendingDictation != nil && showsCard }
 
     private let settings: Settings
     private let hotKey = HotKey()

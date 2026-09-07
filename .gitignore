@@ -18,6 +18,8 @@ Local.xcconfig
 .swiftpm/
 
 
+.agents/skills
+.claude/skills
 .delta/
 docs/plans
 tools/
