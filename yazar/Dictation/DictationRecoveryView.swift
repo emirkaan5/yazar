@@ -32,11 +32,14 @@ struct DictationRecoveryView: View {
                     .accessibilityHidden(true)
             }
 
+            // One line is all the capsule has. Longer causes still read in
+            // full on hover rather than ending at an ellipsis.
             Text(message)
                 .lineLimit(1)
                 .truncationMode(.tail)
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity, alignment: .leading)
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .help(message)
 
             if isWorking {
                 Button("Cancel") { yazar.cancel() }

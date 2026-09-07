@@ -61,7 +61,7 @@ struct OverlayView: View {
         case .warmingUp, .recording: settings.showRecordingTimer ? 115 : 65
         case .noSpeech: 175
         case .copied: 210
-        default: 115
+        case .idle, .transcribing: 115
         }
         return CGSize(width: width, height: 35)
     }

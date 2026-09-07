@@ -21,6 +21,9 @@ final class Yazar {
     // or abandons a dictation releases the global key.
     private(set) var state: State = .idle {
         didSet {
+            // Any transition is fresh news, so a card the user hid stops hiding.
+            // Only re-showing without a transition stays an explicit call.
+            isRecoveryHidden = false
             switch state {
             case .warmingUp, .recording, .transcribing, .retrying:
                 escapeHotKey.capture(true)
@@ -38,7 +41,6 @@ final class Yazar {
 
     private(set) var pendingDictation: PendingDictation?
     var isRecoveryHidden = false
-    private var attemptID: UUID?
     private let makeTranscriber: (TranscriptionRoute) -> any Transcriber
     private let insertText: @MainActor (String) -> Inserter.Outcome
     private let copyText: @MainActor (String) -> Inserter.Outcome
@@ -127,7 +129,6 @@ final class Yazar {
             return
         }
 
-        isRecoveryHidden = false
         recordingStartedAt = nil
         level = 0
         state = .warmingUp
@@ -245,9 +246,6 @@ final class Yazar {
         isRetry: Bool
     ) {
         stateResetTask?.cancel()
-        isRecoveryHidden = false
-        let id = UUID()
-        attemptID = id
         let transcriber = makeTranscriber(route)
         let demoMode = isDemoMode
         state = isRetry ? .retrying : .transcribing
@@ -265,9 +263,8 @@ final class Yazar {
                 text = try await transcriber.transcribe(recording)
 #endif
                 try Task.checkCancellation()
-                guard let self, attemptID == id else { return }
+                guard let self else { return }
                 transcriptionTask = nil
-                attemptID = nil
                 guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                     fail(.transcription(.emptyText))
                     return
@@ -289,9 +286,8 @@ final class Yazar {
                     }
                 }
             } catch {
-                guard let self, attemptID == id, !Task.isCancelled else { return }
+                guard let self, !Task.isCancelled else { return }
                 transcriptionTask = nil
-                attemptID = nil
                 fail(.transcription(TranscriptionFailure(error)))
             }
         }
@@ -310,14 +306,13 @@ final class Yazar {
         }
     }
 
-    /// Explicit abandonment invalidates late completions before freeing payloads.
+    /// Cancel before freeing the payloads: a reply that lands afterwards sees a
+    /// cancelled task and returns without reviving what it was carrying.
     func discardRecovery() {
-        attemptID = nil
         transcriptionTask?.cancel()
         transcriptionTask = nil
         stateResetTask?.cancel()
         pendingDictation = nil
-        isRecoveryHidden = false
         state = .idle
     }
 
@@ -339,7 +334,6 @@ final class Yazar {
             discardRecovery()
             play(.cancel)
         case .retrying:
-            attemptID = nil
             transcriptionTask?.cancel()
             transcriptionTask = nil
             state = .recovered
@@ -356,13 +350,11 @@ final class Yazar {
         recorderPollingTask?.cancel()
         recorderPollingTask = nil
         recorder.cancel()
-        attemptID = nil
         transcriptionTask?.cancel()
         transcriptionTask = nil
         stateResetTask?.cancel()
         recordingStartedAt = nil
         level = 0
-        isRecoveryHidden = false
         play(.error)
         state = .error(failure)
     }

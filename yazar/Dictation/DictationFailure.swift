@@ -29,8 +29,8 @@ enum DictationFailure: Hashable {
     var message: String {
         switch self {
         case .recorder(let error): error.errorDescription ?? "Yazar could not record."
-        case .hotKey(let error): error.errorDescription ?? "Yazar could not listen for the dictation key."
-        case .clipboardUnavailable: "Couldn't put the transcription on the clipboard."
+        case .hotKey(let error): error.errorDescription ?? "Yazar can't watch the dictation key."
+        case .clipboardUnavailable: "Couldn't write to the clipboard."
         case .transcription(let failure): failure.localizedDescription
         }
     }
