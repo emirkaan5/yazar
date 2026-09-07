@@ -1,6 +1,10 @@
 import Foundation
 
 nonisolated struct OpenRouterTranscriber: Transcriber {
+    /// A literal the app ships with: a parse failure here is a typo in this
+    /// file, not something a provider or a user can cause.
+    private static let endpoint = URL(string: "https://openrouter.ai/api/v1/audio/transcriptions")!
+
     /// A dictation is a few seconds of audio and the user is waiting on it, so
     /// the whole thing gets one short deadline.
     private static let dictationTimeout = Duration.seconds(35)
@@ -78,7 +82,7 @@ nonisolated struct OpenRouterTranscriber: Transcriber {
             }
             defer { group.cancelAll() }
             guard let value = try await group.next() else {
-                throw TranscriptionFailure.invalidResponse
+                preconditionFailure("The timeout group always has two child tasks")
             }
             return value
         }
@@ -91,11 +95,7 @@ nonisolated struct OpenRouterTranscriber: Transcriber {
         guard !model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw TranscriptionFailure.invalidModel
         }
-        guard let url = URL(string: "https://openrouter.ai/api/v1/audio/transcriptions") else {
-            throw TranscriptionFailure.invalidResponse
-        }
-
-        var request = URLRequest(url: url)
+        var request = URLRequest(url: Self.endpoint)
         request.httpMethod = "POST"
         request.timeoutInterval = 30
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
@@ -107,19 +107,32 @@ nonisolated struct OpenRouterTranscriber: Transcriber {
         ))
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
+        guard let response = response as? HTTPURLResponse else {
             throw TranscriptionFailure.invalidResponse
         }
-        guard (200..<300).contains(httpResponse.statusCode) else {
-            throw TranscriptionFailure.httpStatus(httpResponse.statusCode)
-        }
+        return try Self.decodeResponse(data, statusCode: response.statusCode)
+    }
 
-        do {
-            let responseBody = try JSONDecoder().decode(ResponseBody.self, from: data)
-            return responseBody.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        } catch {
+    /// Returns trimmed transcript text or throws a provider-neutral failure.
+    /// A documented OpenRouter error envelope is classified from its structured
+    /// fields; remote message prose and response bodies are never retained or
+    /// surfaced, because they can echo the audio that was sent.
+    ///
+    /// Not private so the wire contract can be tested without a live request.
+    static func decodeResponse(_ data: Data, statusCode: Int) throws -> String {
+        guard (200..<300).contains(statusCode) else {
+            throw TranscriptionFailure.httpStatus(statusCode)
+        }
+        let decoder = JSONDecoder()
+        if let body = try? decoder.decode(ResponseBody.self, from: data) {
+            return body.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        // Work that fails after the response has started still arrives as 200
+        // carrying only an error object, so a 2xx body is not proof of success.
+        guard let envelope = try? decoder.decode(ErrorEnvelope.self, from: data) else {
             throw TranscriptionFailure.invalidResponse
         }
+        throw envelope.failure
     }
 
     /// Whisper-style endpoints expect a bare ISO-639-1 code, but the language
@@ -150,6 +163,41 @@ nonisolated struct OpenRouterTranscriber: Transcriber {
 
     private struct ResponseBody: Decodable {
         let text: String
+    }
+
+    /// OpenRouter's documented error envelope. `message` is deliberately absent:
+    /// it is remote prose that can quote the request.
+    private struct ErrorEnvelope: Decodable {
+        let error: ServiceError
+
+        struct ServiceError: Decodable {
+            let code: Int
+            let metadata: Metadata?
+        }
+
+        struct Metadata: Decodable {
+            let errorType: String?
+
+            enum CodingKeys: String, CodingKey {
+                case errorType = "error_type"
+            }
+        }
+
+        /// A stable `error_type` wins where it names exactly one cause, because
+        /// it survives the numeric code being 200. Anything else — an unmapped
+        /// type, an image or length error dictation cannot produce — falls back
+        /// to reading the code as an HTTP status.
+        var failure: TranscriptionFailure {
+            switch error.metadata?.errorType {
+            case "authentication": .credentials
+            case "permission_denied": .accessDenied
+            case "payment_required": .paymentRequired
+            case "rate_limit_exceeded": .rateLimited
+            case "provider_overloaded", "provider_unavailable", "server": .serviceUnavailable
+            case "timeout": .timedOut
+            default: .httpStatus(error.code)
+            }
+        }
     }
 
 }
