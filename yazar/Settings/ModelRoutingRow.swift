@@ -6,7 +6,7 @@ struct ModelRoutingRow: View {
     let inputSource: KeyboardInputSource
 
     var body: some View {
-        SettingsRow(inputSource.name, description: sourceDescription) {
+        SettingsRow(inputSource.name) {
             HStack(spacing: 8) {
                 Picker(providerAccessibilityName, selection: providerSelection) {
                     Text("Default").tag(TranscriptionProvider?.none)
@@ -72,19 +72,6 @@ struct ModelRoutingRow: View {
         } set: { model in
             settings.setModel(.openRouter(model), for: inputSource.id)
         }
-    }
-
-    private var sourceDescription: String {
-        guard isFollowingDefault else { return languageDescription }
-        return "\(languageDescription) Follows the default model."
-    }
-
-    private var languageDescription: String {
-        guard let language = inputSource.languageIdentifier else {
-            return "No intended language; uses the fixed language setting."
-        }
-        let name = Locale.current.localizedString(forIdentifier: language) ?? language
-        return "Uses \(name) as the transcription language."
     }
 
     private var providerAccessibilityName: String {

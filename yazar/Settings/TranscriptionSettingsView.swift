@@ -10,13 +10,21 @@ struct TranscriptionSettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             SettingsSection("Default Provider") {
-                SettingsRow("Provider", description: settings.provider.summary) {
-                    Picker("Provider", selection: $settings.provider) {
+                SettingsRow("Provider") {
+                    // A Menu of toggles rather than a Picker: only menu items
+                    // built this way carry the second line of explanation.
+                    Menu {
                         ForEach(TranscriptionProvider.allCases) { provider in
-                            Text(provider.displayName).tag(provider)
+                            Toggle(isOn: selection(of: provider)) {
+                                Text(provider.displayName)
+                                Text(provider.summary)
+                            }
                         }
+                    } label: {
+                        Text(settings.provider.displayName)
+                            .lineLimit(1)
                     }
-                    .labelsHidden()
+                    .accessibilityLabel("Provider")
                     .frame(width: 220, alignment: .trailing)
                 }
 
@@ -98,6 +106,16 @@ struct TranscriptionSettingsView: View {
             }
         }
         .onAppear(perform: loadInputSources)
+    }
+
+    /// Re-picking the selected provider must leave it selected, even though the
+    /// menu represents its checkmark with a toggle.
+    private func selection(of provider: TranscriptionProvider) -> Binding<Bool> {
+        Binding {
+            settings.provider == provider
+        } set: { isSelected in
+            if isSelected { settings.provider = provider }
+        }
     }
 
     /// A key a pinned input source needs that the default provider does not, so

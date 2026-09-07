@@ -89,7 +89,7 @@ struct OverlayView: View {
         case .noSpeech:
             Label("No speech detected", systemImage: "mic.slash")
         case .copied:
-            Label("Copied — paste with ⌘V", systemImage: "checkmark")
+            Label("Copied. Paste with ⌘V", systemImage: "checkmark")
         case .retrying, .error, .recovery:
             DictationRecoveryView(yazar: yazar, settings: settings, openSettings: openSettings)
         }

@@ -24,7 +24,7 @@ nonisolated enum TranscriptionProvider: String, CaseIterable, Codable, Identifia
     var summary: String {
         switch self {
         case .appleSpeech:
-            "Processes audio on this Mac. macOS may fetch a language asset on first use."
+            "Processes audio locally."
         case .openRouter:
             "Sends each recording to OpenRouter for transcription."
         }
