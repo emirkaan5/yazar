@@ -77,14 +77,11 @@ struct DictationRecoveryView: View {
             }
 
             if !isWorking {
-                Button("Dismiss", systemImage: "xmark") {
-                    if yazar.hasRecovery { yazar.dismissRecovery() }
-                    else { yazar.discardRecovery() }
-                }
-                .labelStyle(.iconOnly)
-                .buttonStyle(.plain)
-                .foregroundStyle(.white.opacity(0.8))
-                .help(yazar.hasRecovery ? "Hide — reopen from the Yazar menu" : "Dismiss")
+                Button("Dismiss", systemImage: "xmark") { yazar.cancel() }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.white.opacity(0.8))
+                    .help(failure == nil ? "Hide — reopen from the Yazar menu" : "Discard")
             }
         }
         .font(.system(size: 13, weight: .medium))

@@ -40,18 +40,14 @@ struct YazarRecoveryTests {
         try await waitUntil { await provider.recordings.count == 1 }
         await provider.reply(0, with: .failure(.timedOut))
         try await waitUntil { yazar.state == .error(.transcription(.timedOut)) }
+        // A failed attempt keeps the audio, with the formatting rules it was
+        // captured under.
         #expect(yazar.hasRecovery)
-        yazar.dismissRecovery()
-        #expect(yazar.isRecoveryHidden)
-        yazar.revealRecovery()
-        // Hiding and re-showing is presentation only: the audio is still there,
-        // with the formatting rules it was captured under.
-        #expect(!yazar.isRecoveryHidden)
-        guard case .audio(let hidden, let hiddenRules, _) = yazar.pendingDictation else {
+        guard case .audio(let retained, let retainedRules, _) = yazar.pendingDictation else {
             Issue.record("Expected retained audio"); return
         }
-        #expect(hidden.pcm16 == audio.pcm16)
-        #expect(hiddenRules == [.lowercase])
+        #expect(retained.pcm16 == audio.pcm16)
+        #expect(retainedRules == [.lowercase])
 
         settings.transcription.language = "de"
         yazar.retry(using: .appleSpeech)
@@ -129,6 +125,13 @@ struct YazarRecoveryTests {
             Issue.record("Expected retained audio"); return
         }
         #expect(retained.pcm16 == audio.pcm16)
+        // Closing the card in recovery is presentation only: the offer waits in
+        // the menu instead of being thrown away.
+        yazar.cancel()
+        #expect(yazar.isRecoveryHidden)
+        #expect(yazar.hasRecovery)
+        yazar.revealRecovery()
+        #expect(!yazar.isRecoveryHidden)
         yazar.retry(using: .openRouter("new/model"))
         try await waitUntil { await provider.recordings.count == 3 }
         await provider.reply(1, with: .success("OLD"))
@@ -142,6 +145,28 @@ struct YazarRecoveryTests {
         #expect(!yazar.hasRecovery)
         yazar.retry(using: .appleSpeech)
         #expect(yazar.state == .idle)
+    }
+
+    @Test("Closing an error card discards it so the next trigger records")
+    func dismissingErrorDiscards() async throws {
+        let provider = DictationTestTranscriber()
+        let yazar = Yazar(settings: settings(), makeTranscriber: { _ in provider })
+        defer { yazar.stop() }
+        let audio = Recording(pcm16: Data([9, 10]))
+        let route = TranscriptionRoute(model: .appleSpeech, language: "en")
+        yazar.transcribe(audio, rules: [], route: route)
+        try await waitUntil { await provider.recordings.count == 1 }
+        await provider.reply(0, with: .failure(.network))
+        try await waitUntil { yazar.state == .error(.transcription(.network)) }
+        #expect(yazar.hasRecovery)
+
+        // What the card's dismiss button and Escape both do.
+        yazar.cancel()
+        #expect(!yazar.hasRecovery)
+        #expect(!yazar.isRecoveryHidden)
+        #expect(yazar.state == .idle)
+        yazar.retry(using: .appleSpeech)
+        #expect(await provider.recordings.count == 1)
     }
 
     @Test("Empty recognition remains retryable; initial cancellation and stop discard")

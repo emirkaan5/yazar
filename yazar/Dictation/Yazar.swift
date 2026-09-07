@@ -342,6 +342,8 @@ final class Yazar {
     }
 
     /// Escape abandons an initial dictation, but cancelling a retry keeps audio.
+    /// The card's dismiss button routes here too, so both ways of closing it
+    /// agree on what closing means in each state.
     func cancel() {
         textContextCapture.cancel()
         switch state {
@@ -360,7 +362,11 @@ final class Yazar {
             // Cancellation retains audio.
             state = .recovery
             play(.cancel)
-        case .error, .recovery:
+        case .error:
+            // Closing a failure gives it up. Keeping the payload would make the
+            // next trigger reopen the error instead of starting a recording.
+            discardRecovery()
+        case .recovery:
             dismissRecovery()
         case .idle, .noSpeech, .copied:
             return
