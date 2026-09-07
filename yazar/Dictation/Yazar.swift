@@ -292,7 +292,19 @@ final class Yazar {
             } catch {
                 guard let self, !Task.isCancelled else { return }
                 transcriptionTask = nil
-                fail(.transcription(TranscriptionFailure(error)))
+                let failure = TranscriptionFailure(error)
+                if failure == .unknown {
+                    // An unclassified error means the cause vocabulary is missing
+                    // a case, and the user only sees "couldn't finish". Domain and
+                    // code are enough to find it later; the message is left out
+                    // because it can quote the audio that was sent.
+                    let error = error as NSError
+                    NSLog(
+                        "Yazar could not classify a dictation transcription failure from %@ (%@ %ld)",
+                        route.model.provider.displayName, error.domain, error.code
+                    )
+                }
+                fail(.transcription(failure))
             }
         }
     }
