@@ -1,6 +1,10 @@
 import Foundation
 
 nonisolated struct OpenRouterTranscriber: Transcriber {
+    /// A literal the app ships with: a parse failure here is a typo in this
+    /// file, not something a provider or a user can cause.
+    private static let endpoint = URL(string: "https://openrouter.ai/api/v1/audio/transcriptions")!
+
     /// A dictation is a few seconds of audio and the user is waiting on it, so
     /// the whole thing gets one short deadline.
     private static let dictationTimeout = Duration.seconds(35)
@@ -74,11 +78,11 @@ nonisolated struct OpenRouterTranscriber: Transcriber {
             group.addTask { try await operation() }
             group.addTask {
                 try await Task.sleep(for: duration)
-                throw OpenRouterTranscriberError.timedOut
+                throw TranscriptionFailure.timedOut
             }
             defer { group.cancelAll() }
             guard let value = try await group.next() else {
-                throw OpenRouterTranscriberError.invalidResponse
+                preconditionFailure("The timeout group always has two child tasks")
             }
             return value
         }
@@ -86,13 +90,12 @@ nonisolated struct OpenRouterTranscriber: Transcriber {
 
     private func performRequest(_ wav: Data) async throws -> String {
         guard !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw OpenRouterTranscriberError.missingAPIKey
+            throw TranscriptionFailure.credentials
         }
-        guard let url = URL(string: "https://openrouter.ai/api/v1/audio/transcriptions") else {
-            throw OpenRouterTranscriberError.invalidEndpoint
+        guard !model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw TranscriptionFailure.invalidModel
         }
-
-        var request = URLRequest(url: url)
+        var request = URLRequest(url: Self.endpoint)
         request.httpMethod = "POST"
         request.timeoutInterval = 30
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
@@ -104,39 +107,32 @@ nonisolated struct OpenRouterTranscriber: Transcriber {
         ))
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw OpenRouterTranscriberError.invalidResponse
+        guard let response = response as? HTTPURLResponse else {
+            throw TranscriptionFailure.invalidResponse
         }
-        guard (200..<300).contains(httpResponse.statusCode) else {
-            if let response = try? JSONDecoder().decode(ErrorResponse.self, from: data) {
-                throw OpenRouterTranscriberError.service(response.error.message)
-            }
-            throw OpenRouterTranscriberError.service(
-                "OpenRouter returned HTTP \(httpResponse.statusCode)."
-            )
-        }
-
-        do {
-            let responseBody = try JSONDecoder().decode(ResponseBody.self, from: data)
-            return responseBody.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        } catch {
-            // A failure returned with HTTP 200, which happens, decodes as a
-            // missing key and would otherwise be reported as unreadable data.
-            if let failure = try? JSONDecoder().decode(ErrorResponse.self, from: data) {
-                throw OpenRouterTranscriberError.service(failure.error.message)
-            }
-            throw OpenRouterTranscriberError.unreadableResponse(Self.preview(of: data))
-        }
+        return try Self.decodeResponse(data, statusCode: response.statusCode)
     }
 
-    /// The start of a body that could not be read, so the error names what came
-    /// back rather than how the decoder felt about it.
-    private static func preview(of data: Data) -> String {
-        let text = String(decoding: data.prefix(2_000), as: UTF8.self)
-            .split(whereSeparator: \.isNewline)
-            .joined(separator: " ")
-            .trimmingCharacters(in: .whitespaces)
-        return text.count > 200 ? text.prefix(200) + "…" : text
+    /// Returns trimmed transcript text or throws a provider-neutral failure.
+    /// A documented OpenRouter error envelope is classified from its structured
+    /// fields; remote message prose and response bodies are never retained or
+    /// surfaced, because they can echo the audio that was sent.
+    ///
+    /// Not private so the wire contract can be tested without a live request.
+    static func decodeResponse(_ data: Data, statusCode: Int) throws -> String {
+        guard (200..<300).contains(statusCode) else {
+            throw TranscriptionFailure.httpStatus(statusCode)
+        }
+        let decoder = JSONDecoder()
+        if let body = try? decoder.decode(ResponseBody.self, from: data) {
+            return body.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        // Work that fails after the response has started still arrives as 200
+        // carrying only an error object, so a 2xx body is not proof of success.
+        guard let envelope = try? decoder.decode(ErrorEnvelope.self, from: data) else {
+            throw TranscriptionFailure.invalidResponse
+        }
+        throw envelope.failure
     }
 
     /// Whisper-style endpoints expect a bare ISO-639-1 code, but the language
@@ -169,32 +165,39 @@ nonisolated struct OpenRouterTranscriber: Transcriber {
         let text: String
     }
 
-    private struct ErrorResponse: Decodable {
+    /// OpenRouter's documented error envelope. `message` is deliberately absent:
+    /// it is remote prose that can quote the request.
+    private struct ErrorEnvelope: Decodable {
         let error: ServiceError
-    }
 
-    private struct ServiceError: Decodable {
-        let message: String
-    }
-}
+        struct ServiceError: Decodable {
+            let code: Int
+            let metadata: Metadata?
+        }
 
-private enum OpenRouterTranscriberError: LocalizedError {
-    case missingAPIKey
-    case invalidEndpoint
-    case invalidResponse
-    case unreadableResponse(String)
-    case timedOut
-    case service(String)
+        struct Metadata: Decodable {
+            let errorType: String?
 
-    var errorDescription: String? {
-        switch self {
-        case .missingAPIKey: "Add your OpenRouter API key in Yazar Settings."
-        case .invalidEndpoint: "The OpenRouter transcription endpoint is invalid."
-        case .invalidResponse: "OpenRouter returned an invalid response."
-        case .unreadableResponse(let body):
-            "OpenRouter's reply was not in the expected shape. It sent: \(body)"
-        case .timedOut: "OpenRouter transcription timed out."
-        case .service(let message): message
+            enum CodingKeys: String, CodingKey {
+                case errorType = "error_type"
+            }
+        }
+
+        /// A stable `error_type` wins where it names exactly one cause, because
+        /// it survives the numeric code being 200. Anything else — an unmapped
+        /// type, an image or length error dictation cannot produce — falls back
+        /// to reading the code as an HTTP status.
+        var failure: TranscriptionFailure {
+            switch error.metadata?.errorType {
+            case "authentication": .credentials
+            case "permission_denied": .accessDenied
+            case "payment_required": .paymentRequired
+            case "rate_limit_exceeded": .rateLimited
+            case "provider_overloaded", "provider_unavailable", "server": .serviceUnavailable
+            case "timeout": .timedOut
+            default: .httpStatus(error.code)
+            }
         }
     }
+
 }

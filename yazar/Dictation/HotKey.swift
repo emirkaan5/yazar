@@ -4,8 +4,10 @@ import Foundation
 enum HotKeyError: LocalizedError, Hashable {
     case eventTapUnavailable
 
+    /// Short enough for the dictation capsule. System Access settings, which the
+    /// failure links to, spells out the grant and offers the relaunch.
     var errorDescription: String? {
-        "Yazar could not start its event tap. Grant Accessibility permission, then relaunch."
+        "Yazar can't watch the dictation key."
     }
 }
 

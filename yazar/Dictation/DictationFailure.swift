@@ -1,3 +1,5 @@
+import Foundation
+
 /// Why a dictation ended badly.
 ///
 /// The state machine carries this rather than a rendered sentence, so the
@@ -9,16 +11,29 @@ enum DictationFailure: Hashable {
     case recorder(RecorderError)
     case hotKey(HotKeyError)
     case clipboardUnavailable
-    /// A provider's own words. Service errors are open-ended server prose, so
-    /// there is nothing more specific to model here.
-    case transcription(String)
+    case transcription(TranscriptionFailure)
 
+    var settingsPage: AppPage? {
+        switch self {
+        case .hotKey: .systemAccess
+        case .recorder: .general
+        case .clipboardUnavailable: nil
+        case .transcription(let failure):
+            switch failure {
+            case .credentials, .accessDenied, .paymentRequired, .rateLimited: .providers
+            default: .transcription
+            }
+        }
+    }
+
+    /// Wrapped errors describe themselves. Only the clipboard failure is the
+    /// dictation layer's own, so it is the only sentence written here.
     var message: String {
         switch self {
-        case .recorder(let error): error.errorDescription ?? "Yazar could not record."
-        case .hotKey(let error): error.errorDescription ?? "Yazar could not listen for the dictation key."
-        case .clipboardUnavailable: "Couldn't put the transcription on the clipboard."
-        case .transcription(let message): message
+        case .recorder(let error): error.localizedDescription
+        case .hotKey(let error): error.localizedDescription
+        case .clipboardUnavailable: "Couldn't write to the clipboard."
+        case .transcription(let failure): failure.localizedDescription
         }
     }
 }

@@ -12,6 +12,10 @@ struct YazarApp: App {
                 appDelegate.showApp()
             }
 
+            if appDelegate.hasDictationRecovery {
+                Button("Recover Dictation…") { appDelegate.showDictationRecovery() }
+            }
+
             if appDelegate.isMeetingsEnabled {
                 Button(appDelegate.meetingActionTitle) {
                     appDelegate.toggleMeeting()
@@ -22,6 +26,12 @@ struct YazarApp: App {
                     appDelegate.showMeetings()
                 }
             }
+
+#if DEBUG
+            Divider()
+
+            Button("Debug Panel…", action: appDelegate.showDebugPanel)
+#endif
 
             Divider()
 
@@ -47,6 +57,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var selectedPage = AppPage.general
     private var overlayPanel: OverlayPanel?
     private var appWindow: NSWindow?
+#if DEBUG
+    private var debugPanel: DebugPanelController?
+#endif
 
     override init() {
         let settings = Settings()
@@ -79,9 +92,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var menuBarIcon: String {
         switch yazar.state {
         case .warmingUp, .recording: "waveform.circle.fill"
-        case .transcribing: "ellipsis.circle"
+        case .transcribing, .retrying: "ellipsis.circle"
         case .error: "exclamationmark.circle"
-        case .idle, .noSpeech: meetingIcon
+        // Recovery offers one of two things, and the icon says which without
+        // opening the card: audio to retry, or text to copy.
+        case .recovery:
+            switch yazar.pendingDictation {
+            case .audio: "arrow.clockwise.circle"
+            case .text: "doc.on.clipboard"
+            case nil: meetingIcon
+            }
+        case .idle, .noSpeech, .copied: meetingIcon
         }
     }
 
@@ -94,6 +115,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case .transcribing: "ellipsis.circle"
         case .idle, .failed: "waveform"
         }
+    }
+
+    var hasDictationRecovery: Bool { yazar.hasRecovery }
+
+    func showDictationRecovery() {
+        overlayPanel?.showRecovery()
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard yazar.hasRecovery else { return .terminateNow }
+        let alert = NSAlert()
+        alert.messageText = "Discard your unfinished dictation?"
+        alert.informativeText = "The recording or text is kept only in memory and will be lost when Yazar quits."
+        alert.addButton(withTitle: "Return to Dictation")
+        alert.addButton(withTitle: "Discard and Quit")
+        NSApp.activate()
+        if alert.runModal() == .alertSecondButtonReturn { return .terminateNow }
+        showDictationRecovery()
+        return .terminateCancel
     }
 
     var meetingActionTitle: String {
@@ -174,6 +214,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func showMeetings() {
         meetingsWindow.show()
     }
+
+#if DEBUG
+    func showDebugPanel() {
+        if debugPanel == nil {
+            debugPanel = DebugPanelController(yazar: yazar)
+        }
+        debugPanel?.show()
+    }
+#endif
 
     /// Hands off to the copy of Yazar already running and quits.
     ///
@@ -268,7 +317,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func startEngine() {
         permissions.stopPolling()
         if overlayPanel == nil {
-            overlayPanel = OverlayPanel(yazar: yazar, settings: settings)
+            overlayPanel = OverlayPanel(yazar: yazar, settings: settings) { [weak self] page in
+                self?.showApp(page: page)
+            }
         }
         do {
             try yazar.start()

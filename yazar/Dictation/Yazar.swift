@@ -10,6 +10,11 @@ final class Yazar {
         case warmingUp
         case recording
         case transcribing
+        case retrying
+        /// Something is retained and waiting on the user. Which offer that is —
+        /// retry the audio, or copy the text — is `pendingDictation`'s to say.
+        case recovery
+        case copied
         case noSpeech
         case error(DictationFailure)
     }
@@ -18,10 +23,13 @@ final class Yazar {
     // or abandons a dictation releases the global key.
     private(set) var state: State = .idle {
         didSet {
+            // Any transition is fresh news, so a card the user hid stops hiding.
+            // Only re-showing without a transition stays an explicit call.
+            isRecoveryHidden = false
             switch state {
-            case .warmingUp, .recording, .transcribing:
+            case .warmingUp, .recording, .transcribing, .retrying:
                 escapeHotKey.capture(true)
-            case .idle, .noSpeech, .error:
+            case .idle, .noSpeech, .error, .recovery, .copied:
                 escapeHotKey.capture(false)
             }
         }
@@ -32,6 +40,27 @@ final class Yazar {
     private(set) var isListening = false
     private(set) var level = 0.0
     private(set) var recordingStartedAt: Date?
+
+    private(set) var pendingDictation: PendingDictation?
+    private(set) var isRecoveryHidden = false
+    private let makeTranscriber: (TranscriptionRoute) -> any Transcriber
+    private let insertText: @MainActor (String) -> Inserter.Outcome
+    private let copyText: @MainActor (String) -> Inserter.Outcome
+
+    /// Whether the overlay is showing the recovery card rather than plain
+    /// dictation progress.
+    var showsCard: Bool {
+        switch state {
+        case .error, .retrying, .recovery: true
+        default: false
+        }
+    }
+
+    /// Whether the card holds something the user can still act on or lose. This
+    /// is what the menu offers and what quitting warns about, so a first attempt
+    /// does not count: it retains audio, but nothing has failed and nothing is
+    /// on offer until it does.
+    var hasRecovery: Bool { pendingDictation != nil && showsCard }
 
     private let settings: Settings
     private let hotKey = HotKey()
@@ -47,8 +76,16 @@ final class Yazar {
     private var stateResetTask: Task<Void, Never>?
     private var recorderPollingTask: Task<Void, Never>?
 
-    init(settings: Settings) {
+    init(
+        settings: Settings,
+        makeTranscriber: ((TranscriptionRoute) -> any Transcriber)? = nil,
+        insertText: @escaping @MainActor (String) -> Inserter.Outcome = Inserter.insert,
+        copyText: @escaping @MainActor (String) -> Inserter.Outcome = Inserter.copy
+    ) {
         self.settings = settings
+        self.makeTranscriber = makeTranscriber ?? { settings.makeTranscriber(for: $0) }
+        self.insertText = insertText
+        self.copyText = copyText
         hotKey.onModifiersChanged = { [weak self] held in self?.modifiersChanged(held) }
         escapeHotKey.onPress = { [weak self] in self?.cancel() }
     }
@@ -62,7 +99,7 @@ final class Yazar {
         hotKey.stop()
         escapeHotKey.stop()
         isListening = false
-        transcriptionTask?.cancel()
+        discardRecovery()
         stateResetTask?.cancel()
         recorderPollingTask?.cancel()
         textContextCapture.cancel()
@@ -72,13 +109,6 @@ final class Yazar {
     func show(_ failure: DictationFailure) {
         fail(failure)
     }
-
-#if DEBUG
-    func triggerDemoError() {
-        play(.error)
-        fail(.transcription("This is a demo error from Yazar."))
-    }
-#endif
 
     /// The trigger is whatever combination the user chose, matched exactly, so an
     /// unrelated modifier pressed on top of it reads as a release.
@@ -94,12 +124,16 @@ final class Yazar {
     }
 
     private func pressed() {
+        guard !hasRecovery else {
+            revealRecovery()
+            return
+        }
         switch state {
         case .idle:
             break
-        case .noSpeech, .error:
+        case .noSpeech, .error, .copied:
             stateResetTask?.cancel()
-        case .warmingUp, .recording, .transcribing:
+        case .warmingUp, .recording, .transcribing, .retrying, .recovery:
             return
         }
 
@@ -120,7 +154,7 @@ final class Yazar {
         switch state {
         case .warmingUp, .recording:
             break
-        case .idle, .transcribing, .noSpeech, .error:
+        case .idle, .transcribing, .noSpeech, .error, .retrying, .recovery, .copied:
             return
         }
 
@@ -186,9 +220,43 @@ final class Yazar {
         }
 
         let route = settings.transcription.dictationRoute(for: KeyboardInputSource.current)
-        let transcriber = settings.makeTranscriber(for: route)
-        state = .transcribing
-        transcriptionTask?.cancel()
+        transcribe(recording, rules: rules, route: route, context: insertionContext)
+    }
+
+    /// Own the recording before launching work. Initial delivery can use its
+    /// captured target; recovery deliberately never keeps that target alive.
+    func transcribe(
+        _ recording: Recording,
+        rules: Set<FormattingRule>,
+        route: TranscriptionRoute,
+        context: TextInsertionContext? = nil
+    ) {
+        guard pendingDictation == nil else { return }
+        pendingDictation = .audio(recording, rules: rules, route: route)
+        runTranscription(recording, rules: rules, route: route, context: context, isRetry: false)
+    }
+
+    /// Reuses retained speech and language with current credentials. Repeated
+    /// clicks and calls without recoverable audio are harmless.
+    func retry(using model: TranscriptionModel) {
+        guard transcriptionTask == nil,
+              case .audio(let recording, let rules, let previous) = pendingDictation else { return }
+        let route = TranscriptionRoute(model: model, language: previous.language)
+        pendingDictation = .audio(recording, rules: rules, route: route)
+        runTranscription(recording, rules: rules, route: route, context: nil, isRetry: true)
+    }
+
+    private func runTranscription(
+        _ recording: Recording,
+        rules: Set<FormattingRule>,
+        route: TranscriptionRoute,
+        context: TextInsertionContext?,
+        isRetry: Bool
+    ) {
+        stateResetTask?.cancel()
+        let transcriber = makeTranscriber(route)
+        let demoMode = isDemoMode
+        state = isRetry ? .retrying : .transcribing
         transcriptionTask = Task { [weak self] in
             do {
                 let text: String
@@ -203,20 +271,86 @@ final class Yazar {
                 text = try await transcriber.transcribe(recording)
 #endif
                 try Task.checkCancellation()
-                self?.deliver(text, rules: rules, context: insertionContext)
-            } catch is CancellationError {
-                return
+                guard let self else { return }
+                transcriptionTask = nil
+                guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    fail(.transcription(.emptyText))
+                    return
+                }
+                var result = TranscriptFormatter.apply(rules, to: text)
+                if !isRetry, let context {
+                    result = TranscriptFitter.fit(result, to: context)
+                }
+                // A successful retry retains text instead of delivering it: the
+                // window it was dictated into is long gone.
+                pendingDictation = .text(result)
+                if isRetry {
+                    state = .recovery
+                } else {
+                    switch insertText(result) {
+                    case .delivered:
+                        pendingDictation = nil
+                        state = .idle
+                    case .clipboardUnavailable:
+                        fail(.clipboardUnavailable)
+                    }
+                }
             } catch {
-                guard !Task.isCancelled else { return }
-                self?.play(.error)
-                self?.fail(.transcription(error.localizedDescription))
+                guard let self, !Task.isCancelled else { return }
+                transcriptionTask = nil
+                let failure = TranscriptionFailure(error)
+                if failure == .unknown {
+                    // An unclassified error means the cause vocabulary is missing
+                    // a case, and the user only sees "couldn't finish". Domain and
+                    // code are enough to find it later; the message is left out
+                    // because it can quote the audio that was sent.
+                    let error = error as NSError
+                    NSLog(
+                        "Yazar could not classify a dictation transcription failure from %@ (%@ %ld)",
+                        route.model.provider.displayName, error.domain, error.code
+                    )
+                }
+                fail(.transcription(failure))
             }
         }
     }
 
-    /// Escape drops whatever is in flight. Only reachable while a dictation is
-    /// running, since that is the only time the hot key is registered.
-    private func cancel() {
+    /// Copy failure preserves the text; success releases the recovery artifact.
+    func copyRecoveredText() {
+        guard case .text(let text) = pendingDictation else { return }
+        switch copyText(text) {
+        case .delivered:
+            pendingDictation = nil
+            state = .copied
+            resetState(after: .seconds(2))
+        case .clipboardUnavailable:
+            fail(.clipboardUnavailable)
+        }
+    }
+
+    /// Cancel before freeing the payloads: a reply that lands afterwards sees a
+    /// cancelled task and returns without reviving what it was carrying.
+    func discardRecovery() {
+        transcriptionTask?.cancel()
+        transcriptionTask = nil
+        stateResetTask?.cancel()
+        pendingDictation = nil
+        state = .idle
+    }
+
+    func dismissRecovery() {
+        isRecoveryHidden = true
+    }
+
+    /// Shows retained recovery without changing or discarding its payload.
+    func revealRecovery() {
+        isRecoveryHidden = false
+    }
+
+    /// Escape abandons an initial dictation, but cancelling a retry keeps audio.
+    /// The card's dismiss button routes here too, so both ways of closing it
+    /// agree on what closing means in each state.
+    func cancel() {
         textContextCapture.cancel()
         switch state {
         case .warmingUp, .recording:
@@ -226,11 +360,21 @@ final class Yazar {
             level = 0
             state = .idle
         case .transcribing:
+            discardRecovery()
+            play(.cancel)
+        case .retrying:
             transcriptionTask?.cancel()
             transcriptionTask = nil
+            // Cancellation retains audio.
+            state = .recovery
             play(.cancel)
-            state = .idle
-        case .idle, .noSpeech, .error:
+        case .error:
+            // Closing a failure gives it up. Keeping the payload would make the
+            // next trigger reopen the error instead of starting a recording.
+            discardRecovery()
+        case .recovery:
+            dismissRecovery()
+        case .idle, .noSpeech, .copied:
             return
         }
     }
@@ -238,38 +382,15 @@ final class Yazar {
     private func fail(_ failure: DictationFailure) {
         textContextCapture.cancel()
         recorderPollingTask?.cancel()
+        recorderPollingTask = nil
         recorder.cancel()
         transcriptionTask?.cancel()
+        transcriptionTask = nil
+        stateResetTask?.cancel()
+        recordingStartedAt = nil
+        level = 0
+        play(.error)
         state = .error(failure)
-        resetState(after: .seconds(2.5))
-    }
-
-    /// Keep every transcription on the clipboard and attempt to paste it into the
-    /// focused application. A provider that recognized nothing lands in the same
-    /// place as audio that never cleared the speech gate.
-    private func deliver(
-        _ text: String,
-        rules: Set<FormattingRule>,
-        context: TextInsertionContext?
-    ) {
-        guard !text.isEmpty else {
-            showNoSpeech()
-            return
-        }
-        // The user's rules first, then the fit to the surrounding text: fitting
-        // reconciles the final string with its neighbours, so nothing may run
-        // after it.
-        var textToPaste = TranscriptFormatter.apply(rules, to: text)
-        if let context {
-            textToPaste = TranscriptFitter.fit(textToPaste, to: context)
-        }
-        switch Inserter.insert(textToPaste) {
-        case .delivered:
-            state = .idle
-        case .clipboardUnavailable:
-            play(.error)
-            fail(.clipboardUnavailable)
-        }
     }
 
     private func showNoSpeech() {
