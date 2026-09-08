@@ -94,8 +94,8 @@ struct AXElement {
     }
 
     /// The range belonging to this editor, never the inherited document bounds.
-    func editorMarkerRange() -> AXTextMarkerRange? {
-        guard let value = parameterizedAttribute("AXTextMarkerRangeForUIElement", raw),
+    func markerRange(for editor: AXElement) -> AXTextMarkerRange? {
+        guard let value = parameterizedAttribute("AXTextMarkerRangeForUIElement", editor.raw),
               CFGetTypeID(value) == AXTextMarkerRangeGetTypeID() else { return nil }
         return unsafeDowncast(value, to: AXTextMarkerRange.self)
     }

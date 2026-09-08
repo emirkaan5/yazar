@@ -74,6 +74,7 @@ final class TextContextCapture {
             snapshot.status = "Focused element unavailable"
             snapshot.shouldRetry = true
             snapshot.details = session.messages
+            snapshot.elapsedMilliseconds = session.elapsedMilliseconds
             return snapshot
         }
         snapshot.focusedElement = focused.raw
@@ -95,6 +96,7 @@ final class TextContextCapture {
             && (session.needsRetry || session.expired || activated || !sameFocus)
         snapshot.status = snapshot.context == nil ? "Context unavailable; use unfitted transcript" : "Context captured"
         snapshot.details = session.messages
+        snapshot.elapsedMilliseconds = session.elapsedMilliseconds
         return snapshot
     }
 

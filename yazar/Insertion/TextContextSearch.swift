@@ -65,28 +65,30 @@ final class TextContextSearch {
         let selected = element.string(kAXSelectedTextAttribute)
         let value = element.string(kAXValueAttribute)
         let count = element.number(kAXNumberOfCharactersAttribute)
-        if let value, count == nil || count == (value as NSString).length, let context = TextInsertionContext(
-            contents: value, selectedRange: range, applicationBundleIdentifier: bundleIdentifier
-        ), selected == nil || selected == context.selectedText {
-            // Reread the selection to reject a caret moved during this attempt.
-            guard selectedRange(of: element) == range else {
-                element.session.retry("Selection changed during capture")
-                return nil
-            }
-            element.session.note("Accepted editor AXValue and selection")
-            return context
+        let contents: String?
+        if let value, count == nil || count == (value as NSString).length {
+            contents = value
+        } else if let count, count >= 0 {
+            contents = element.string(kAXStringForRangeParameterizedAttribute,
+                                      for: NSRange(location: 0, length: count))
+        } else {
+            contents = nil
         }
-        if let count, count >= 0,
-           let contents = element.string(kAXStringForRangeParameterizedAttribute, for: NSRange(location: 0, length: count)),
-           let context = TextInsertionContext(contents: contents, selectedRange: range,
-                                              applicationBundleIdentifier: bundleIdentifier),
-           selected == nil || selected == context.selectedText,
-           selectedRange(of: element) == range {
-            element.session.note("Accepted editor AXStringForRange and selection")
-            return context
+        guard let contents else { return nil }
+        guard let context = TextInsertionContext(
+            contents: contents, selectedRange: range, applicationBundleIdentifier: bundleIdentifier
+        ), selected == nil || selected == context.selectedText else {
+            element.session.retry("Conventional text and selection disagree")
+            return nil
         }
-        element.session.note("Conventional text/selection unavailable or inconsistent")
-        return nil
+        // AX attributes are separate reads: even a valid split can be stale if
+        // the selection changed while the target was answering.
+        guard selectedRange(of: element) == range else {
+            element.session.retry("Selection changed during capture")
+            return nil
+        }
+        element.session.note("Accepted editor text and selection \(range)")
+        return context
     }
 
     private func selectedRange(of element: AXElement) -> NSRange? {
@@ -100,22 +102,28 @@ final class TextContextSearch {
     }
 
     private func markerContext(_ editor: AXElement, focused: AXElement) -> TextInsertionContext? {
-        guard let bounds = editor.editorMarkerRange(),
-              let selection = editor.textMarkerRange(kAXSelectedTextMarkerRangeAttribute)
-                ?? focused.textMarkerRange(kAXSelectedTextMarkerRangeAttribute),
-              let contents = editor.string(for: bounds) else { return nil }
+        guard let selection = editor.textMarkerRange(kAXSelectedTextMarkerRangeAttribute)
+                ?? focused.textMarkerRange(kAXSelectedTextMarkerRangeAttribute) else { return nil }
         var translator: AXElement? = editor
         var translators: Set<AXUIElement> = []
         for _ in 0..<12 {
             guard let current = translator, translators.insert(current.raw).inserted else { break }
             // Both ranges use this translator's origin. The selected range is
             // then made relative to the editor, not to a parent document.
-            if let editorRange = current.range(of: bounds),
+            if let bounds = current.markerRange(for: editor),
+               let contents = current.string(for: bounds),
+               let editorRange = current.range(of: bounds),
                let selectedRange = current.range(of: selection),
                let context = TextInsertionContext(
                    contents: contents, editorRange: editorRange, selectedRange: selectedRange,
                    applicationBundleIdentifier: bundleIdentifier
                ), let selected = current.string(for: selection), selected == context.selectedText {
+                guard let latestSelection = editor.textMarkerRange(kAXSelectedTextMarkerRangeAttribute)
+                        ?? focused.textMarkerRange(kAXSelectedTextMarkerRangeAttribute),
+                      current.range(of: latestSelection) == selectedRange else {
+                    editor.session.retry("Marker selection changed during capture")
+                    return nil
+                }
                 editor.session.note("Accepted editor markers via \(CFHash(current.raw)); bounds \(editorRange), selection \(selectedRange)")
                 return context
             }

@@ -5,13 +5,20 @@ import Foundation
 /// temporarily unresponsive process can be retried without retrying unsupported APIs.
 @MainActor
 final class AXReadSession {
+    private let started = ContinuousClock.now
     let deadline: ContinuousClock.Instant
     private(set) var needsRetry = false
     private(set) var expired = false
     private(set) var messages: [String] = []
 
     init(budget: Duration = .milliseconds(180)) {
-        deadline = .now + budget
+        deadline = started + budget
+    }
+
+    var elapsedMilliseconds: Int {
+        let elapsed = started.duration(to: .now)
+        return Int(elapsed.components.seconds * 1_000)
+            + Int(elapsed.components.attoseconds / 1_000_000_000_000_000)
     }
 
     func prepare(_ element: AXUIElement) -> Bool {
@@ -30,7 +37,12 @@ final class AXReadSession {
     func record(_ element: AXUIElement, attribute: String, error: AXError, value: CFTypeRef?) {
         if error == .cannotComplete || error == .invalidUIElement { needsRetry = true }
 #if DEBUG
-        note("\(CFHash(element)) \(attribute): \(error) (\(error.rawValue))\(value.map { " → " + summary($0) } ?? "")")
+        let description = value.map { value in
+            if attribute == kAXRoleAttribute || attribute == kAXSubroleAttribute,
+               let role = value as? String { return role }
+            return summary(value)
+        }
+        note("\(elapsedMilliseconds) ms · \(CFHash(element)) \(attribute): \(error) (\(error.rawValue))\(description.map { " → " + $0 } ?? "")")
 #endif
     }
 
