@@ -49,6 +49,8 @@ final class TextContextCapture {
 
     private func captureContext() -> TextInsertionContext? {
         guard AXIsProcessTrusted() else { return nil }
+        let session = AXReadSession()
+        let systemWideElement = AXElement(raw: systemWideElement, session: session)
 
         // Chromium may not publish a useful focused element until a trusted
         // client explicitly enables the frontmost application's AX tree.
@@ -100,7 +102,7 @@ final class TextContextCapture {
     /// session is enough; a dictation lasts seconds.
     private func enableAccessibilityTree(for processID: pid_t) {
         guard accessibilityEnabledProcessIDs.insert(processID).inserted else { return }
-        let application = AXUIElementCreateApplication(processID)
+        let application = AXElement(raw: AXUIElementCreateApplication(processID), session: AXReadSession())
         for attribute in [
             Self.manualAccessibilityAttribute,
             Self.enhancedUserInterfaceAttribute,

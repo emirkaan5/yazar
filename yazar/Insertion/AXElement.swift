@@ -1,51 +1,51 @@
 import ApplicationServices
 import Foundation
 
-/// Typed, failure-tolerant reads over the C Accessibility API.
-///
-/// Every accessor returns nil, or an empty array, when the attribute is
-/// missing, unsupported, or arrives as an unexpected Core Foundation type.
-/// Callers treat all three the same way: this element cannot answer, ask
-/// another one. Deciding which element to trust belongs to the caller; this
-/// extension only knows how to get a Swift value out of one safely.
-extension AXUIElement {
+/// Typed reads over the C Accessibility boundary. Related elements carry the
+/// same attempt budget and diagnostics; optional values do not erase AX errors.
+@MainActor
+struct AXElement {
+    let raw: AXUIElement
+    let session: AXReadSession
+
     var processID: pid_t? {
         var processID = pid_t()
-        guard AXUIElementGetPid(self, &processID) == .success else { return nil }
+        guard AXUIElementGetPid(raw, &processID) == .success else { return nil }
         return processID
     }
 
     func attribute(_ name: String) -> CFTypeRef? {
+        guard session.prepare(raw) else { return nil }
         var value: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(self, name as CFString, &value) == .success
-        else { return nil }
-        return value
+        let error = AXUIElementCopyAttributeValue(raw, name as CFString, &value)
+        session.record(raw, attribute: name, error: error, value: value)
+        return error == .success ? value : nil
     }
 
     func parameterizedAttribute(_ name: String, _ parameter: CFTypeRef) -> CFTypeRef? {
+        guard session.prepare(raw) else { return nil }
         var value: CFTypeRef?
-        guard AXUIElementCopyParameterizedAttributeValue(
-            self,
-            name as CFString,
-            parameter,
-            &value
-        ) == .success else { return nil }
-        return value
+        let error = AXUIElementCopyParameterizedAttributeValue(raw, name as CFString, parameter, &value)
+        session.record(raw, attribute: name, error: error, value: value)
+        return error == .success ? value : nil
     }
 
-    /// Applications that reject the attribute are the expected case, so the
-    /// result is discarded rather than reported.
-    func setAttribute(_ name: String, to value: CFTypeRef) {
-        AXUIElementSetAttributeValue(self, name as CFString, value)
+    @discardableResult
+    func setAttribute(_ name: String, to value: CFTypeRef) -> AXError {
+        guard session.prepare(raw) else { return .cannotComplete }
+        let error = AXUIElementSetAttributeValue(raw, name as CFString, value)
+        session.record(raw, attribute: "set " + name, error: error, value: nil)
+        return error
     }
 
-    func element(_ name: String) -> AXUIElement? {
-        attribute(name).flatMap(Self.element(from:))
+    func element(_ name: String) -> AXElement? {
+        attribute(name).flatMap(Self.element(from:)).map { AXElement(raw: $0, session: session) }
     }
 
-    func elements(_ name: String) -> [AXUIElement] {
+    func elements(_ name: String) -> [AXElement] {
         guard let values = attribute(name) as? [Any] else { return [] }
         return values.compactMap { Self.element(from: $0 as CFTypeRef) }
+            .map { AXElement(raw: $0, session: session) }
     }
 
     /// AX answers with `String` or `NSAttributedString` depending on the
@@ -80,12 +80,6 @@ extension AXUIElement {
     // character offsets. Decoding them stays here; which element may speak for
     // the focused textbox through a marker is a caller's decision.
 
-    func textMarker(_ name: String) -> AXTextMarker? {
-        guard let value = attribute(name),
-              CFGetTypeID(value) == AXTextMarkerGetTypeID() else { return nil }
-        return unsafeDowncast(value, to: AXTextMarker.self)
-    }
-
     func textMarkerRange(_ name: String) -> AXTextMarkerRange? {
         guard let value = attribute(name),
               CFGetTypeID(value) == AXTextMarkerRangeGetTypeID() else { return nil }
@@ -99,15 +93,20 @@ extension AXUIElement {
         ))
     }
 
-    /// Translates a marker range into this element's UTF-16 coordinate space.
-    /// A marker exposed on a child often converts only on a web-area ancestor,
-    /// so callers ask more than one element and keep whichever answers.
+    /// The range belonging to this editor, never the inherited document bounds.
+    func editorMarkerRange() -> AXTextMarkerRange? {
+        guard let value = parameterizedAttribute("AXTextMarkerRangeForUIElement", raw),
+              CFGetTypeID(value) == AXTextMarkerRangeGetTypeID() else { return nil }
+        return unsafeDowncast(value, to: AXTextMarkerRange.self)
+    }
+
+    /// Both editor bounds and selection must be converted by the same element.
     func range(of markerRange: AXTextMarkerRange) -> NSRange? {
         guard let start = index(of: AXTextMarkerRangeCopyStartMarker(markerRange)),
               let end = index(of: AXTextMarkerRangeCopyEndMarker(markerRange)),
               start >= 0,
-              end >= start else { return nil }
-        return NSRange(location: start, length: end - start)
+              end >= 0 else { return nil }
+        return NSRange(location: min(start, end), length: abs(end - start))
     }
 
     private func index(of marker: AXTextMarker) -> Int? {

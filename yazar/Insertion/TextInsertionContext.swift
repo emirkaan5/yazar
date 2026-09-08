@@ -52,6 +52,25 @@ nonisolated struct TextInsertionContext: Equatable, Sendable {
         self.applicationBundleIdentifier = applicationBundleIdentifier
     }
 
+    /// Marker indexes may start at a document offset. Rebase both ends using
+    /// bounds translated by the same AX element, and reject selections outside it.
+    init?(
+        contents: String,
+        editorRange: NSRange,
+        selectedRange: NSRange,
+        applicationBundleIdentifier: String? = nil
+    ) {
+        guard editorRange.location >= 0,
+              editorRange.length == (contents as NSString).length,
+              selectedRange.location >= editorRange.location else { return nil }
+        self.init(
+            contents: contents,
+            selectedRange: NSRange(location: selectedRange.location - editorRange.location,
+                                   length: selectedRange.length),
+            applicationBundleIdentifier: applicationBundleIdentifier
+        )
+    }
+
     /// `NSString` will manufacture an invalid string if a range cuts a UTF-16
     /// surrogate pair. Combining-sequence boundaries remain valid AX offsets.
     private static func isUTF16Boundary(_ offset: Int, in string: NSString) -> Bool {

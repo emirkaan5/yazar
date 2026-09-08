@@ -49,6 +49,32 @@ struct TextInsertionContextTests {
         #expect(caret.afterText == "B")
     }
 
+    @Test("Rebases document marker indexes against the editor, including a collapsed caret")
+    func rebasesMarkerIndexes() throws {
+        let context = try #require(TextInsertionContext(
+            contents: "Hello world", editorRange: NSRange(location: 200, length: 11),
+            selectedRange: NSRange(location: 205, length: 0)
+        ))
+        #expect(context.beforeText == "Hello")
+        #expect(context.afterText == " world")
+        #expect(context.selectedText.isEmpty)
+    }
+
+    @Test("Rejects markers from outside the editor or a different text representation")
+    func rejectsForeignMarkers() {
+        for range in [NSRange(location: 5, length: 0), NSRange(location: 212, length: 0),
+                      NSRange(location: 205, length: 7)] {
+            #expect(TextInsertionContext(
+                contents: "Hello world", editorRange: NSRange(location: 200, length: 11),
+                selectedRange: range
+            ) == nil)
+        }
+        #expect(TextInsertionContext(
+            contents: "Hello", editorRange: NSRange(location: 200, length: 11),
+            selectedRange: NSRange(location: 205, length: 0)
+        ) == nil)
+    }
+
     @Test(
         "Rejects invalid UTF-16 ranges",
         arguments: [
