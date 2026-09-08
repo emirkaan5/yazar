@@ -69,6 +69,9 @@ final class Yazar {
     private let recorder = Recorder()
     private let soundPlayer = StatusSoundPlayer()
     private let textContextCapture = TextContextCapture()
+#if DEBUG
+    let inputMonitor = DebugInputMonitor()
+#endif
     /// Set while the settings screen is recording a new trigger, so pressing keys
     /// to choose one does not start a dictation.
     var ignoresTrigger = false
@@ -281,14 +284,26 @@ final class Yazar {
                 }
                 var result = TranscriptFormatter.apply(rules, to: text)
                 var targetChanged = false
+#if DEBUG
+                var currentInput: TextInputSnapshot?
+#endif
                 if !isRetry, let context {
                     let current = try await refreshInput()
+#if DEBUG
+                    currentInput = current
+#endif
                     try Task.checkCancellation()
                     targetChanged = current.targetChanged(since: context)
                     if !targetChanged, let freshContext = current.context {
                         result = TranscriptFitter.fit(result, to: freshContext)
                     }
                 }
+#if DEBUG
+                inputMonitor.record(
+                    stop: context, current: currentInput, transcript: text, output: result,
+                    decision: isRetry || targetChanged ? "Retain for recovery; no paste" : "Request paste"
+                )
+#endif
                 transcriptionTask = nil
                 // A successful retry retains text instead of delivering it: the
                 // window it was dictated into is long gone.

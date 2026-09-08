@@ -7,12 +7,15 @@ struct DebugPanelView: View {
 
     var body: some View {
         TabView {
+            Tab("Text Input", systemImage: "text.cursor") {
+                DebugInputView(monitor: yazar.inputMonitor)
+            }
             Tab("Errors", systemImage: "exclamationmark.triangle") {
                 DebugErrorsView(yazar: yazar)
             }
         }
         .padding(12)
-        .frame(minWidth: 360, minHeight: 230)
+        .frame(minWidth: 560, minHeight: 380)
     }
 }
 #endif
