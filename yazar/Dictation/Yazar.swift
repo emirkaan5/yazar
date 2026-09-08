@@ -46,6 +46,7 @@ final class Yazar {
     private let makeTranscriber: (TranscriptionRoute) -> any Transcriber
     private let insertText: @MainActor (String) -> Inserter.Outcome
     private let copyText: @MainActor (String) -> Inserter.Outcome
+    private let refreshInput: @MainActor () async throws -> TextInputSnapshot
 
     /// Whether the overlay is showing the recovery card rather than plain
     /// dictation progress.
@@ -80,12 +81,14 @@ final class Yazar {
         settings: Settings,
         makeTranscriber: ((TranscriptionRoute) -> any Transcriber)? = nil,
         insertText: @escaping @MainActor (String) -> Inserter.Outcome = Inserter.insert,
-        copyText: @escaping @MainActor (String) -> Inserter.Outcome = Inserter.copy
+        copyText: @escaping @MainActor (String) -> Inserter.Outcome = Inserter.copy,
+        refreshInput: @escaping @MainActor () async throws -> TextInputSnapshot = TextContextCapture.refresh
     ) {
         self.settings = settings
         self.makeTranscriber = makeTranscriber ?? { settings.makeTranscriber(for: $0) }
         self.insertText = insertText
         self.copyText = copyText
+        self.refreshInput = refreshInput
         hotKey.onModifiersChanged = { [weak self] held in self?.modifiersChanged(held) }
         escapeHotKey.onPress = { [weak self] in self?.cancel() }
     }
@@ -229,7 +232,7 @@ final class Yazar {
         _ recording: Recording,
         rules: Set<FormattingRule>,
         route: TranscriptionRoute,
-        context: TextInsertionContext? = nil
+        context: TextInputSnapshot? = nil
     ) {
         guard pendingDictation == nil else { return }
         pendingDictation = .audio(recording, rules: rules, route: route)
@@ -250,7 +253,7 @@ final class Yazar {
         _ recording: Recording,
         rules: Set<FormattingRule>,
         route: TranscriptionRoute,
-        context: TextInsertionContext?,
+        context: TextInputSnapshot?,
         isRetry: Bool
     ) {
         stateResetTask?.cancel()
@@ -272,19 +275,25 @@ final class Yazar {
 #endif
                 try Task.checkCancellation()
                 guard let self else { return }
-                transcriptionTask = nil
                 guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                     fail(.transcription(.emptyText))
                     return
                 }
                 var result = TranscriptFormatter.apply(rules, to: text)
+                var targetChanged = false
                 if !isRetry, let context {
-                    result = TranscriptFitter.fit(result, to: context)
+                    let current = try await refreshInput()
+                    try Task.checkCancellation()
+                    targetChanged = current.targetChanged(since: context)
+                    if !targetChanged, let freshContext = current.context {
+                        result = TranscriptFitter.fit(result, to: freshContext)
+                    }
                 }
+                transcriptionTask = nil
                 // A successful retry retains text instead of delivering it: the
                 // window it was dictated into is long gone.
                 pendingDictation = .text(result)
-                if isRetry {
+                if isRetry || targetChanged {
                     state = .recovery
                 } else {
                     switch insertText(result) {

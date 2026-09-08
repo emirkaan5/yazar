@@ -19,6 +19,92 @@ struct YazarRecoveryTests {
         Issue.record("Dictation did not reach the expected state")
     }
 
+    @Test("Initial delivery fits against the fresh caret rather than the recording-stop snapshot")
+    func freshInsertionContext() async throws {
+        let provider = DictationTestTranscriber()
+        var inserted: [String] = []
+        let original = TextInputSnapshot(processID: 42, context: .init(beforeText: "", selectedText: "", afterText: ""))
+        let current = TextInputSnapshot(processID: 42, context: .init(beforeText: "Hello", selectedText: "", afterText: " world"))
+        let yazar = Yazar(settings: settings(), makeTranscriber: { _ in provider }, insertText: {
+            inserted.append($0)
+            return .delivered
+        }, refreshInput: { current })
+        defer { yazar.stop() }
+        yazar.transcribe(Recording(pcm16: Data([1, 2])), rules: [],
+                         route: .init(model: .appleSpeech, language: "en"), context: original)
+        try await waitUntil { await provider.recordings.count == 1 }
+        await provider.reply(0, with: .success("Beautiful."))
+        try await waitUntil { yazar.state == .idle }
+        #expect(inserted == [" beautiful"])
+    }
+
+    @Test("An unavailable fresh context still delivers an unfitted transcript")
+    func unavailableInsertionContext() async throws {
+        let provider = DictationTestTranscriber()
+        var inserted: [String] = []
+        let original = TextInputSnapshot(processID: 42, context: .init(beforeText: "Hello", selectedText: "", afterText: " world"))
+        let yazar = Yazar(settings: settings(), makeTranscriber: { _ in provider }, insertText: {
+            inserted.append($0)
+            return .delivered
+        }, refreshInput: { TextInputSnapshot(processID: 42) })
+        defer { yazar.stop() }
+        yazar.transcribe(Recording(pcm16: Data([1, 2])), rules: [],
+                         route: .init(model: .appleSpeech, language: "en"), context: original)
+        try await waitUntil { await provider.recordings.count == 1 }
+        await provider.reply(0, with: .success("Beautiful."))
+        try await waitUntil { yazar.state == .idle }
+        #expect(inserted == ["Beautiful."])
+    }
+
+    @Test("A changed target retains unfitted text for recovery without pasting")
+    func changedInsertionTarget() async throws {
+        let provider = DictationTestTranscriber()
+        var inserted: [String] = []
+        let yazar = Yazar(settings: settings(), makeTranscriber: { _ in provider }, insertText: {
+            inserted.append($0)
+            return .delivered
+        }, refreshInput: { TextInputSnapshot(processID: 99) })
+        defer { yazar.stop() }
+        yazar.transcribe(Recording(pcm16: Data([1, 2])), rules: [],
+                         route: .init(model: .appleSpeech, language: "en"),
+                         context: TextInputSnapshot(processID: 42))
+        try await waitUntil { await provider.recordings.count == 1 }
+        await provider.reply(0, with: .success("Beautiful."))
+        try await waitUntil { yazar.state == .recovery }
+        #expect(inserted.isEmpty)
+        guard case .text(let text) = yazar.pendingDictation else {
+            Issue.record("Expected recoverable text"); return
+        }
+        #expect(text == "Beautiful.")
+    }
+
+    @Test("Cancellation during AX refresh prevents delivery")
+    func cancelsInputRefresh() async throws {
+        let provider = DictationTestTranscriber()
+        var refreshing = false
+        var inserted: [String] = []
+        let yazar = Yazar(settings: settings(), makeTranscriber: { _ in provider }, insertText: {
+            inserted.append($0)
+            return .delivered
+        }, refreshInput: {
+            refreshing = true
+            try await Task.sleep(for: .seconds(30))
+            return TextInputSnapshot(processID: 42)
+        })
+        defer { yazar.stop() }
+        yazar.transcribe(Recording(pcm16: Data([1, 2])), rules: [],
+                         route: .init(model: .appleSpeech, language: "en"),
+                         context: TextInputSnapshot(processID: 42))
+        try await waitUntil { await provider.recordings.count == 1 }
+        await provider.reply(0, with: .success("Beautiful."))
+        try await waitUntil { refreshing }
+        yazar.cancel()
+        await Task.yield()
+        #expect(yazar.state == .idle)
+        #expect(inserted.isEmpty)
+        #expect(yazar.pendingDictation == nil)
+    }
+
     @Test("Switching providers preserves speech, language and formatting without changing defaults")
     func retryAcrossProviders() async throws {
         let settings = settings()

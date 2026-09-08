@@ -34,6 +34,11 @@ final class AXReadSession {
 #endif
     }
 
+    func retry(_ reason: String) {
+        needsRetry = true
+        note(reason)
+    }
+
     func note(_ message: String) {
 #if DEBUG
         if messages.count < 250 { messages.append(message) }

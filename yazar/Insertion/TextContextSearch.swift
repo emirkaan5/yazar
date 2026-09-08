@@ -8,6 +8,7 @@ final class TextContextSearch {
     private let bundleIdentifier: String?
     private var visited: Set<AXUIElement> = []
     private(set) var editor: AXElement?
+    private var hasMultipleSelections = false
 
     init(bundleIdentifier: String?) {
         self.bundleIdentifier = bundleIdentifier
@@ -23,7 +24,7 @@ final class TextContextSearch {
         if let context = conventionalContext(editor) { return context }
         // Failed conventional messaging is not evidence that an inherited
         // marker is more authoritative. Retry the read first.
-        guard !editor.session.needsRetry else { return nil }
+        guard !editor.session.needsRetry, !hasMultipleSelections else { return nil }
         return markerContext(editor, focused: focused)
     }
 
@@ -60,36 +61,42 @@ final class TextContextSearch {
     }
 
     private func conventionalContext(_ element: AXElement) -> TextInsertionContext? {
-        let multiple = element.ranges(kAXSelectedTextRangesAttribute)
-        guard multiple.count <= 1 else {
-            element.session.note("Multiple selections are unsupported")
-            return nil
-        }
-        guard let range = element.range(kAXSelectedTextRangeAttribute) ?? multiple.first else { return nil }
+        guard let range = selectedRange(of: element) else { return nil }
         let selected = element.string(kAXSelectedTextAttribute)
         let value = element.string(kAXValueAttribute)
-        if let value, let context = TextInsertionContext(
+        let count = element.number(kAXNumberOfCharactersAttribute)
+        if let value, count == nil || count == (value as NSString).length, let context = TextInsertionContext(
             contents: value, selectedRange: range, applicationBundleIdentifier: bundleIdentifier
         ), selected == nil || selected == context.selectedText {
             // Reread the selection to reject a caret moved during this attempt.
-            guard (element.range(kAXSelectedTextRangeAttribute) ?? multiple.first) == range else {
-                element.session.note("Selection changed during capture")
+            guard selectedRange(of: element) == range else {
+                element.session.retry("Selection changed during capture")
                 return nil
             }
             element.session.note("Accepted editor AXValue and selection")
             return context
         }
-        if let count = element.number(kAXNumberOfCharactersAttribute), count >= 0,
+        if let count, count >= 0,
            let contents = element.string(kAXStringForRangeParameterizedAttribute, for: NSRange(location: 0, length: count)),
            let context = TextInsertionContext(contents: contents, selectedRange: range,
                                               applicationBundleIdentifier: bundleIdentifier),
            selected == nil || selected == context.selectedText,
-           (element.range(kAXSelectedTextRangeAttribute) ?? multiple.first) == range {
+           selectedRange(of: element) == range {
             element.session.note("Accepted editor AXStringForRange and selection")
             return context
         }
         element.session.note("Conventional text/selection unavailable or inconsistent")
         return nil
+    }
+
+    private func selectedRange(of element: AXElement) -> NSRange? {
+        let multiple = element.ranges(kAXSelectedTextRangesAttribute)
+        guard multiple.count <= 1 else {
+            hasMultipleSelections = true
+            element.session.note("Multiple selections are unsupported")
+            return nil
+        }
+        return element.range(kAXSelectedTextRangeAttribute) ?? multiple.first
     }
 
     private func markerContext(_ editor: AXElement, focused: AXElement) -> TextInsertionContext? {
