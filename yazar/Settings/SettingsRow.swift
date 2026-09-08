@@ -4,6 +4,8 @@ import SwiftUI
 /// label and description on the left and one control on the right.
 
 struct SettingsSection<Header: View, Content: View>: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     private let header: Header
     private let content: Content
 
@@ -21,13 +23,14 @@ struct SettingsSection<Header: View, Content: View>: View {
             VStack(spacing: 0) {
                 content
             }
-            // A light wash over the window's vibrancy: the card lifts off the
-            // background instead of cutting a dark hole in it.
-            .background(Color.white.opacity(0.06))
-            .clipShape(RoundedRectangle(cornerRadius: 9))
+            // A white wash over the window's vibrancy so the card lifts off the
+            // background. Light mode needs far more of it: over an already pale
+            // backdrop a 6% wash is invisible.
+            .background(Color.white.opacity(colorScheme == .dark ? 0.06 : 0.45))
+            .clipShape(RoundedRectangle(cornerRadius: 13))
             .overlay {
-                RoundedRectangle(cornerRadius: 9)
-                    .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 13)
+                    .stroke(Color(nsColor: .separatorColor), lineWidth: 1.1)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
