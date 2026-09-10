@@ -31,12 +31,20 @@ struct YazarView: View {
     var body: some View {
         HStack(spacing: 0) {
             List(AppPage.allCases, selection: $selection) { page in
-                Label(page.title, systemImage: page.systemImage)
-                    .tag(page)
+                HStack(spacing: 10) {
+                    Image(systemName: page.systemImage)
+                        .font(.system(size: 16))
+                        .foregroundStyle(.tint)
+                        .frame(width: 28)
+                        .accessibilityHidden(true)
+                    Text(page.title)
+                        .fontWeight(selection == page ? .semibold : .regular)
+                }
+                .tag(page)
             }
             .listStyle(.sidebar)
             .safeAreaPadding(.top, 30)
-            .frame(width: 160)
+            .frame(width: 180)
 
             Divider()
 
