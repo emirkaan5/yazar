@@ -28,7 +28,7 @@ struct WaveformView: View {
 // Each bar rides the same sine at its own phase, so the row ripples left to
 // right instead of scaling as one block. The mic level sets the amplitude and
 // is the animatable data; the envelope keeps the middle bars taller than the ends.
-private struct WaveformShape: Shape {
+private nonisolated struct WaveformShape: Shape {
     var level: Double
     var time: TimeInterval
 
