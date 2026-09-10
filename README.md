@@ -9,33 +9,32 @@ I built it because the options I found were heavy Electron apps, paid, or both. 
 
 ## Features
 
-- Hold-to-record dictation from anywhere in macOS
-- Configurable dictation key: any modifier, or a pair of them
-- Automatic text insertion into the active app, with every transcription kept on the clipboard
-- Context-aware capitalization, punctuation, and spacing around the caret or selection
-- On-device transcription with Apple Speech
-- Configurable OpenRouter transcription models
-- Optional per-keyboard-input-source routing of the transcription provider, model, and language
-- Selectable transcription language and provider
-- Selectable audio input and status sound themes
-- OpenRouter API keys stored in the macOS Keychain
+- **Global hotkey:** hold to record from anywhere
+- **Smart formatting:** context-aware capitalization, punctuation, and spacing 
+- **Use any model:** 
+	- Transcribe entirely on-device with **Apple Speech Transcription**.
+	- Bring your own API key and use any transcription model through **OpenRouter**.
+- **Per-keyboard routing:** optionally set different providers and models per input source
+- **Per-app formatting rules:** Customize formatting for individual apps or create app groups that share the same rules.
+- **Full control:** pick your transcription language, provider, audio input, and sound theme
+
 
 ## Usage
 
-Yazar runs in the menu bar.
+Yazar lives in the menu bar. There is nothing to set up. run it, grant Microphone and Accessibility access, and start dictating.
 
-- Hold the dictation key to record. It is 🌐 Globe until you change it in Settings → Dictation, where you can pick any modifier or a pair such as ⌃⌥.
-- Release it to transcribe and paste the text.
-- Press Escape while recording or transcribing to cancel.
-- Use the menu bar icon to change the dictation key, transcription provider, model, language, microphone, or sounds.
-- In Settings → Transcription, enable Input Source Routing to choose a provider and model for each keyboard input source configured on your Mac. Yazar then uses the selected source's intended language for each dictation. Leave a source on Default to follow the provider and model above it.
+1. Hold the dictation key (🌐 Globe by default) and speak.
+2. Release it. Yazar transcribes and pastes the text where you were typing.
+3. Press Escape to cancel.
 
-Yazar reads the active text field through macOS Accessibility and fits each transcription to the current caret or selection before pressing ⌘V. If the target does not expose its text context, Yazar pastes the original transcription unchanged. Every transcription still reaches the clipboard, so it remains available when the active app does not accept the synthetic shortcut.
+Everything else is in Settings: pick a different dictation key, provider, model, language, microphone, or sound theme.
 
-Apple Speech processes recordings on your Mac. macOS may download the selected language asset into system storage the first time you use it and manages later model updates. Yazar does not write dictation recordings to disk. Meeting capture writes its audio to disk while it is still needed for transcription and removes it after transcription succeeds.
+A few details worth knowing:
 
-When you select OpenRouter, Yazar sends each recording directly to OpenRouter for transcription. Your API key stays in the macOS Keychain.
-
+- Yazar matches capitalization and spacing to the text around your caret. Every transcription also goes to the clipboard, so you can paste it yourself if an app blocks ⌘V.
+- Apple Speech runs on your Mac. macOS downloads the language asset the first time you use it.
+- OpenRouter sends each recording to OpenRouter. Your API key stays in the macOS Keychain.
+- Yazar does not keep recordings on disk.
 
 ## Requirements
 
